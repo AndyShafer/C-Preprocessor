@@ -9,7 +9,7 @@ def = emptyDef{ commentStart = "/*"
             , commentLine = "//"
             , identStart = letter <|> char '_'
             , identLetter = alphaNum <|> char '_'
-            , reservedNames = ["#include", "#define"]
+            , reservedNames = ["#include", "#define", "#ifdef", "#ifndef", "#endif"]
             , caseSensitive = True
             }
 

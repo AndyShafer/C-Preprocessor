@@ -21,7 +21,11 @@ restOfLine :: Parser String
 restOfLine = try (manyTill anyChar endOfLine <* endOfLine) <|> (many anyChar <* eof)
 
 directiveParser :: Parser Directive
-directiveParser = include <|> define
+directiveParser = include <|>
+                  define  <|>
+                  ifdef   <|>
+                  ifndef  <|>
+                  endif
 
 include = m_reserved "#include" >> (angleBracketFile <|> quoteFile)
 
@@ -38,12 +42,11 @@ define = do m_reserved "#define"
             r <- ( try (manyTill anyChar endOfLine) <|> many anyChar)
             return $ Define d args r
 
---defineArgsParser :: Parser (Maybe [String])
---defineArgsParser = Just <$> between (char '(') (char ')') defineArgsParser' <|> return Nothing
-    --where defineArgsParser' = m_commaSep m_identifier
+ifdef = m_reserved "#ifdef" >> Ifdef <$> m_identifier
 
---macroChar :: Parser Char
---macroChar = alphaNum <|> char '_'
+ifndef = m_reserved "#ifndef" >> Ifndef <$> m_identifier
+
+endif = m_reserved "#endif" >> return Endif
 
 mainParser :: Parser CLine
 mainParser = m_whiteSpace >> line <* eof

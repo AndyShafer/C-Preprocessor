@@ -3,9 +3,11 @@ module CPreprocessor where
 import Control.Applicative hiding ((<|>),many)
 import Control.Arrow ((***))
 import Control.Monad
+import Control.Monad.Trans
 import Data.List
 import Text.Parsec
 import Text.Parsec.String
+import Text.Parsec.Pos
 import System.FilePath
 
 import CLineParser
@@ -55,25 +57,51 @@ preprocessWithPlaceHolders ph md s = case parse (preprocessParser phs md) "" s o
 preprocessStr :: [MacroDef] -> String -> [CodeSegment]
 preprocessStr = preprocessWithPlaceHolders Nothing
 
-preprocessLines :: String -> [(String, CLine)] -> IO ([MacroDef], [[CodeSegment]])
-preprocessLines filepath lines = foldM acc ([], []) lines
-    where
-      acc (mds, lns) ln = do (mds', lns') <- handleLine mds ln
-                             return $ ((mds'++)***(++lns')) (mds, lns)
-      handleLine mds (text, (DirectiveLine (Include f))) =
-          processInclude f >>= \(mds', lns') -> return (mds', [[DirectiveSegment [IncludeSegment text lns']]])
-      handleLine mds (text, (DirectiveLine d)) = return (processDirective mds d, [preprocessStr mds text])
-      handleLine mds (text, CodeLine) = return ([], [preprocessStr mds text])
-      processDirective mds (Include _) = mds
-      processDirective mds d@(Define _ _ _) = [defineToMacroDef mds d]
-      processInclude (QuoteFile f) = preprocessFile $ takeDirectory filepath </> f
---    acc (mds, lns) (text, (DirectiveLine (Include f))) =
---        processInclude f >>=
---        \(mds', lns') -> (mds'++mds, lns ++ [[DirectiveSegment [IncludeSegment text lns']]])
---    acc (mds, lns) (text, (DirectiveLine d)) = let mds' = processDirective mds d in
---                                               (mds', lns ++ [[DirectiveSegment $ preprocessStr mds text]])
---    acc (mds, lns) (text, CodeLine) = (mds, lns ++ [preprocessStr mds text])
---    processDirective mds d@(Define _ _ _) = defineToMacroDef mds d : mds
+--preprocessLines :: String -> [(String, CLine)] -> IO (PreprocessState, [[CodeSegment]])
+--preprocessLines filepath lines = foldM acc ([], []) lines
+    --where
+      --acc (mds, lns) ln = do (mds', lns') <- handleLine mds ln
+                             --return $ ((mds'++)***(++lns')) (mds, lns)
+      --handleLine mds (text, (DirectiveLine (Include f))) =
+          --processInclude f >>= \(mds', lns') -> return (mds', [[DirectiveSegment [IncludeSegment text lns']]])
+      --handleLine mds (text, (DirectiveLine d)) = return (processDirective mds d, [preprocessStr mds text])
+      --handleLine mds (text, CodeLine) = return (emptyState, [preprocessStr mds text])
+      --processDirective mds (Include _) = mds
+      --processDirective mds d@(Define _ _ _) = [defineToMacroDef mds d]
+      --processInclude (QuoteFile f) = preprocessFile $ takeDirectory filepath </> f
+
+preprocessLines' :: String -> 
+                    ParsecT [(String, CLine)] PreprocessState IO (PreprocessState, [[CodeSegment]])
+preprocessLines' filepath = do cs <- many codeSegment
+                               st <- getState
+                               return (st, cs)
+    where codeSegment = do (text, f) <- includePrim 
+                           (st, segs) <- lift $ processInclude f 
+                           setState st
+                           return $ [DirectiveSegment [IncludeSegment text segs]]
+                        <|>
+                        do (text, d) <- definePrim 
+                           st <- getState
+                           --let newState = addMacroDef st $ defineToMacroDef (macroDefs st) d in putState newState
+                           return $ [DirectiveSegment $ preprocessStr (macroDefs st) text]
+                        <|>
+                        do (text, _) <- codePrim
+                           st <- getState
+                           return $ preprocessStr (macroDefs st) text
+              where 
+                  includePrim = tokenPrim printText incPosition test 
+                      where test (text, DirectiveLine (Include f)) = Just (text, f)
+                            test _ = Nothing
+                  definePrim = tokenPrim printText incPosition test
+                      where test (text, (DirectiveLine d@(Define _ _ _))) = Just (text, d)
+                            test _ = Nothing
+                  codePrim = tokenPrim printText incPosition test
+                      where test (text, CodeLine) = Just (text, CodeLine)
+                            test _ = Nothing
+                  incPosition pos _ _ = incSourceColumn pos (sourceColumn pos)  
+                  printText (s, ln) = s
+                  processInclude (QuoteFile f) = preprocessFile $ takeDirectory filepath </> f
+                      
 
 defineToMacroDef :: [MacroDef] -> Directive -> MacroDef
 defineToMacroDef md (Define s p r) = MacroDef s (length <$> p) $ preprocessWithPlaceHolders p md r
@@ -96,11 +124,13 @@ showPreprocessed phs = foldr appendSegment ""
           expandSegment (ErrorSegment s _) = s
 
 
-preprocess :: String -> String -> IO ([MacroDef], [CodeSegment])
-preprocess filepath content = (id***concat) <$> (preprocessLines filepath $ lineParser content)
+preprocess :: String -> String -> IO (PreprocessState, [CodeSegment])
+preprocess filepath content = do res <- runParserT mempty (preprocessLines' filepath) "" $ lineParser content
+                                 case res of
+                                     Left _ -> fail "Parse error"
+                                     Right r -> return $ (id *** concat) (r :: (PreprocessState, [[CodeSegment]]))
 
-preprocessFile :: String -> IO ([MacroDef], [CodeSegment])
+preprocessFile :: String -> IO (PreprocessState, [CodeSegment])
 preprocessFile filepath = do
     content <- readFile filepath
     preprocess filepath content
-
