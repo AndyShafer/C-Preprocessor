@@ -29,6 +29,7 @@ data MacroDef = MacroDef { title :: String
     deriving Show
 
 data PreprocessState = PreprocessState { macroDefs :: [MacroDef] }
+    deriving Show
 
 instance Semigroup PreprocessState where
     (<>) (PreprocessState x1) (PreprocessState x2) = PreprocessState (x1++x2)

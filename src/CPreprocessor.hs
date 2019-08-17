@@ -75,15 +75,20 @@ preprocessLines' :: String ->
 preprocessLines' filepath = do cs <- many codeSegment
                                st <- getState
                                return (st, cs)
-    where codeSegment = do (text, f) <- includePrim 
-                           (st, segs) <- lift $ processInclude f 
-                           setState st
-                           return $ [DirectiveSegment [IncludeSegment text segs]]
+    where codeSegment = try (
+                          do (text, f) <- includePrim 
+                             (st, segs) <- lift $ processInclude f 
+                             setState st
+                             return $ [DirectiveSegment [IncludeSegment text segs]]
+                            )
                         <|>
-                        do (text, d) <- definePrim 
-                           st <- getState
-                           --let newState = addMacroDef st $ defineToMacroDef (macroDefs st) d in putState newState
-                           return $ [DirectiveSegment $ preprocessStr (macroDefs st) text]
+                        try (
+                          do (text, d) <- definePrim 
+                             st <- getState
+                             let newState = addMacroDef st $ defineToMacroDef (macroDefs st) d in
+                                 putState newState
+                             return $ [DirectiveSegment $ preprocessStr (macroDefs st) text]
+                            )
                         <|>
                         do (text, _) <- codePrim
                            st <- getState
@@ -125,9 +130,9 @@ showPreprocessed phs = foldr appendSegment ""
 
 
 preprocess :: String -> String -> IO (PreprocessState, [CodeSegment])
-preprocess filepath content = do res <- runParserT mempty (preprocessLines' filepath) "" $ lineParser content
+preprocess filepath content = do res <- runParserT (preprocessLines' filepath) (mempty :: PreprocessState)  "" $ lineParser content
                                  case res of
-                                     Left _ -> fail "Parse error"
+                                     Left _ -> error "Parse error"
                                      Right r -> return $ (id *** concat) (r :: (PreprocessState, [[CodeSegment]]))
 
 preprocessFile :: String -> IO (PreprocessState, [CodeSegment])
