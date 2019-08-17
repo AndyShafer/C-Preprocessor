@@ -57,24 +57,11 @@ preprocessWithPlaceHolders ph md s = case parse (preprocessParser phs md) "" s o
 preprocessStr :: [MacroDef] -> String -> [CodeSegment]
 preprocessStr = preprocessWithPlaceHolders Nothing
 
---preprocessLines :: String -> [(String, CLine)] -> IO (PreprocessState, [[CodeSegment]])
---preprocessLines filepath lines = foldM acc ([], []) lines
-    --where
-      --acc (mds, lns) ln = do (mds', lns') <- handleLine mds ln
-                             --return $ ((mds'++)***(++lns')) (mds, lns)
-      --handleLine mds (text, (DirectiveLine (Include f))) =
-          --processInclude f >>= \(mds', lns') -> return (mds', [[DirectiveSegment [IncludeSegment text lns']]])
-      --handleLine mds (text, (DirectiveLine d)) = return (processDirective mds d, [preprocessStr mds text])
-      --handleLine mds (text, CodeLine) = return (emptyState, [preprocessStr mds text])
-      --processDirective mds (Include _) = mds
-      --processDirective mds d@(Define _ _ _) = [defineToMacroDef mds d]
-      --processInclude (QuoteFile f) = preprocessFile $ takeDirectory filepath </> f
-
-preprocessLines' :: String -> 
+preprocessLines :: String -> 
                     ParsecT [(String, CLine)] PreprocessState IO (PreprocessState, [[CodeSegment]])
-preprocessLines' filepath = do cs <- many codeSegment
-                               st <- getState
-                               return (st, cs)
+preprocessLines filepath = do cs <- many codeSegment
+                              st <- getState
+                              return (st, cs)
     where codeSegment = try (
                           do (text, f) <- includePrim 
                              (st, segs) <- lift $ processInclude f 
@@ -116,6 +103,7 @@ showOriginal :: [CodeSegment] -> String
 showOriginal = foldr acc ""
     where acc (Plain p) s = p ++ s
           acc (Macro m _ _) s = m ++ s
+          
 
 showPreprocessed :: [String] -> [CodeSegment] -> String
 showPreprocessed phs = foldr appendSegment ""
@@ -130,7 +118,7 @@ showPreprocessed phs = foldr appendSegment ""
 
 
 preprocess :: String -> String -> IO (PreprocessState, [CodeSegment])
-preprocess filepath content = do res <- runParserT (preprocessLines' filepath) (mempty :: PreprocessState)  "" $ lineParser content
+preprocess filepath content = do res <- runParserT (preprocessLines filepath) (mempty :: PreprocessState)  "" $ lineParser content
                                  case res of
                                      Left _ -> error "Parse error"
                                      Right r -> return $ (id *** concat) (r :: (PreprocessState, [[CodeSegment]]))
