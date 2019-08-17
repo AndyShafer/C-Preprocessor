@@ -100,9 +100,12 @@ defineToMacroDef md (Define s p r) = MacroDef s (length <$> p) $ preprocessWithP
 defineToMacroDef _ _ = error "Not a define directive"
 
 showOriginal :: [CodeSegment] -> String
-showOriginal = foldr acc ""
-    where acc (Plain p) s = p ++ s
-          acc (Macro m _ _) s = m ++ s
+showOriginal = concatMap showOriginalSegment
+    where showOriginalSegment (Plain p) = p
+          showOriginalSegment (Macro m _ _) = m
+          showOriginalSegment (DirectiveSegment segments) = '\n' : (showOriginal segments) ++ "\n"
+          showOriginalSegment (IncludeSegment i _) = i
+          showOriginalSegment (ErrorSegment s _) = s
           
 
 showPreprocessed :: [String] -> [CodeSegment] -> String
