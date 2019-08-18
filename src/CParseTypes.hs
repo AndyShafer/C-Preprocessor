@@ -13,19 +13,23 @@ data Directive = Include IncludeFile
 data IncludeFile = AngleBracketFile String | QuoteFile String
     deriving Show
 
-data CodeSegment = Plain String 
-                 | Macro String (Maybe [String]) [CodeSegment]
+data CodeInfo =    Plain
+                 | Macro (Maybe [String]) [CodeSegment]
                  | Placeholder Int
-                 | DirectiveSegment [CodeSegment]
-                 | IncludeSegment String [CodeSegment]
+                 | IncludeSegment [CodeSegment]
                  | Conditional Bool [CodeSegment]
-                 | ErrorSegment String ErrorMsg
+                 | ErrorSegment ErrorMsg
     deriving Show
 
 data MacroDef = MacroDef { title :: String
                          , parameters :: Maybe Int
                          , redefine :: [CodeSegment]
                          }
+    deriving Show
+
+data CodeSegment = CodeSegment { text :: String
+                               , info :: CodeInfo
+                               }
     deriving Show
 
 data PreprocessState = PreprocessState { macroDefs :: [MacroDef] }

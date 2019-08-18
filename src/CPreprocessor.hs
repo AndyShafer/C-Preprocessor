@@ -14,6 +14,7 @@ import CLineParser
 import CParseTypes
 import CTokenParser
 import CMacroParser
+import Common
 
 maybeToList :: Maybe [a] -> [a]
 maybeToList Nothing = []
@@ -23,13 +24,17 @@ preprocessParser :: [String] -> [MacroDef] -> Parser [CodeSegment]
 preprocessParser phs md = many1 $ codeSegmentParser phs md
 
 codeSegmentParser :: [String] -> [MacroDef] -> Parser CodeSegment
-codeSegmentParser phs md = (try $ m_stringLiteral >>= \s -> return $ Plain $ '"' : s ++ "\"") <|>
-                           (try $ placeHolderParser phs) <|>
-                           (try $ macroParser md) <|>
-                           (Plain <$> many1 macroChar) <|>
-                           ((Plain . (:[])) <$> anyChar)
+codeSegmentParser phs md = try (includeConsumed m_stringLiteral >>= \(s, _) ->
+                               return $ CodeSegment s Plain)  <|>
+                           try ((includeConsumed $ placeHolderParser phs) >>= \(s, ph) ->
+                               return $ CodeSegment s ph)  <|>
+                           try (macroParser md) <|>
+                           try (many1 macroChar >>= \s -> 
+                               return $ CodeSegment s Plain) <|>
+                           (anyChar >>= \c ->
+                               return $ CodeSegment (c:[]) Plain)
 
-placeHolderParser :: [String] -> Parser CodeSegment
+placeHolderParser :: [String] -> Parser CodeInfo
 placeHolderParser phs = m_identifier >>=
                         \id -> case id `elemIndex` phs of
                                    Nothing -> fail "Not a placeholder"
@@ -39,11 +44,6 @@ showArgList :: Maybe [String] -> String
 showArgList Nothing = ""
 showArgList (Just args) = '(' : (concat $ intersperse ", " args) ++ ")"
                     
-checkIfMacro :: [MacroDef] -> String -> CodeSegment
-checkIfMacro mds s = case find ((s==) . title) mds of
-                        Just md -> Macro (title md) Nothing (redefine md)
-                        Nothing -> Plain s
-
 preprocessWithPlaceHolders :: Maybe [String] -> [MacroDef] -> String -> [CodeSegment]
 preprocessWithPlaceHolders ph md s = case parse (preprocessParser phs md) "" s of
                        Left err -> fail $ show err
@@ -51,14 +51,14 @@ preprocessWithPlaceHolders ph md s = case parse (preprocessParser phs md) "" s o
     where
       phs = maybeToList ph
       concatPlain = foldr acc []
-      acc (Plain p1) (Plain p2 : rest) = Plain (p1 ++ p2) : rest
+      acc (CodeSegment t1 Plain) (CodeSegment t2 Plain : rest) = CodeSegment (t1 ++ t2) Plain : rest
       acc x xs = x : xs
 
 preprocessStr :: [MacroDef] -> String -> [CodeSegment]
 preprocessStr = preprocessWithPlaceHolders Nothing
 
 preprocessLines :: String -> 
-                    ParsecT [(String, CLine)] PreprocessState IO (PreprocessState, [[CodeSegment]])
+                   ParsecT [(String, CLine)] PreprocessState IO (PreprocessState, [[CodeSegment]])
 preprocessLines filepath = do cs <- many codeSegment
                               st <- getState
                               return (st, cs)
@@ -66,7 +66,7 @@ preprocessLines filepath = do cs <- many codeSegment
                           do (text, f) <- includePrim 
                              (st, segs) <- lift $ processInclude f 
                              setState st
-                             return $ [DirectiveSegment [IncludeSegment text segs]]
+                             return $ [CodeSegment text $ IncludeSegment segs]
                             )
                         <|>
                         try (
@@ -74,7 +74,8 @@ preprocessLines filepath = do cs <- many codeSegment
                              st <- getState
                              let newState = addMacroDef st $ defineToMacroDef (macroDefs st) d in
                                  putState newState
-                             return $ [DirectiveSegment $ preprocessStr (macroDefs st) text]
+                             return $ preprocessStr (macroDefs st) text
+                             --return $ [DirectiveSegment $ preprocessStr (macroDefs st) text]
                             )
                         <|>
                         do (text, _) <- codePrim
@@ -100,24 +101,18 @@ defineToMacroDef md (Define s p r) = MacroDef s (length <$> p) $ preprocessWithP
 defineToMacroDef _ _ = error "Not a define directive"
 
 showOriginal :: [CodeSegment] -> String
-showOriginal = concatMap showOriginalSegment
-    where showOriginalSegment (Plain p) = p
-          showOriginalSegment (Macro m _ _) = m
-          showOriginalSegment (DirectiveSegment segments) = '\n' : (showOriginal segments) ++ "\n"
-          showOriginalSegment (IncludeSegment i _) = i
-          showOriginalSegment (ErrorSegment s _) = s
-          
+showOriginal = concatMap text          
 
-showPreprocessed :: [String] -> [CodeSegment] -> String
-showPreprocessed phs = foldr appendSegment ""
-    where appendSegment seg [] = expandSegment seg
-          appendSegment seg rest = expandSegment seg ++ " " ++ rest
-          expandSegment (Plain s) = s
-          expandSegment (DirectiveSegment segments) = '\n' : (showPreprocessed phs segments) ++ "\n"
-          expandSegment (Placeholder n) = phs !! n
-          expandSegment (Macro _ ph rd) = showPreprocessed (maybeToList ph ++ phs) rd
-          expandSegment (IncludeSegment _ segments) = showPreprocessed [] segments
-          expandSegment (ErrorSegment s _) = s
+--showPreprocessed :: [String] -> [CodeSegment] -> String
+--showPreprocessed phs = foldr appendSegment ""
+--    where appendSegment seg [] = expandSegment seg
+--          appendSegment seg rest = expandSegment seg ++ " " ++ rest
+--          expandSegment (Plain s) = s
+--          expandSegment (DirectiveSegment segments) = '\n' : (showPreprocessed phs segments) ++ "\n"
+--          expandSegment (Placeholder n) = phs !! n
+--          expandSegment (Macro _ ph rd) = showPreprocessed (maybeToList ph ++ phs) rd
+--          expandSegment (IncludeSegment _ segments) = showPreprocessed [] segments
+--          expandSegment (ErrorSegment s _) = s
 
 
 preprocess :: String -> String -> IO (PreprocessState, [CodeSegment])

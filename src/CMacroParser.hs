@@ -7,6 +7,7 @@ import Text.Parsec.String
 
 import CTokenParser
 import CParseTypes
+import Common
 
 macroChar :: Parser Char
 macroChar = alphaNum <|> char '_'
@@ -31,12 +32,15 @@ macroArgsParser = Just <$> between (char '(') (char ')') macroArgsParser' <|> re
                         return $ open : body ++ [close]
 
 macroParser :: [MacroDef] -> Parser CodeSegment
-macroParser md = do possibleMacro <- many1 macroChar
-                    argList <- macroArgsParser
-                    case find ((possibleMacro==) . title) md of
+macroParser md = do (text, (mac, argList)) <- includeConsumed possibleMacro
+                    case find ((mac==) . title) md of
                         Nothing -> fail "Macro does not exist"
                         Just m -> if (length <$> argList) == parameters m then
-                                      return $ Macro (title m) argList (redefine m) else
-                                      return $ ErrorSegment (possibleMacro ++ showArgList argList) "Incorrect number of arguments"
+                                      return $ CodeSegment text $ Macro argList (redefine m) else
+                                      return $ CodeSegment text $ ErrorSegment "Incorrect number of arguments"
+    where possibleMacro = do
+              mac <- many1 macroChar
+              argList <- macroArgsParser
+              return (mac, argList)
 
 
