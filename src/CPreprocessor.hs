@@ -103,18 +103,15 @@ defineToMacroDef _ _ = error "Not a define directive"
 showOriginal :: [CodeSegment] -> String
 showOriginal = concatMap text          
 
---showPreprocessed :: [String] -> [CodeSegment] -> String
---showPreprocessed phs = foldr appendSegment ""
---    where appendSegment seg [] = expandSegment seg
---          appendSegment seg rest = expandSegment seg ++ " " ++ rest
---          expandSegment (Plain s) = s
---          expandSegment (DirectiveSegment segments) = '\n' : (showPreprocessed phs segments) ++ "\n"
---          expandSegment (Placeholder n) = phs !! n
---          expandSegment (Macro _ ph rd) = showPreprocessed (maybeToList ph ++ phs) rd
---          expandSegment (IncludeSegment _ segments) = showPreprocessed [] segments
---          expandSegment (ErrorSegment s _) = s
-
-
+showPreprocessed :: [String] -> [CodeSegment] -> String
+showPreprocessed phs = concatMap expand
+    where expand seg = case info seg of
+                         Plain -> text seg
+                         Macro phs' segs -> showPreprocessed (maybeToList phs') segs
+                         Placeholder n -> phs !! n
+                         IncludeSegment segs -> showPreprocessed [] segs
+                         ErrorSegment msg -> text seg
+                            
 preprocess :: String -> String -> IO (PreprocessState, [CodeSegment])
 preprocess filepath content = do res <- runParserT (preprocessLines filepath) (mempty :: PreprocessState)  "" $ lineParser content
                                  case res of
