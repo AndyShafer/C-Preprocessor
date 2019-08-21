@@ -94,6 +94,18 @@ preprocessLines filepath = do cs <- many codeSegment
                                       (ifText ++ (concat $ concat $ map (map text) segs) ++ endText) $
                                       Conditional [(active, concat segs)]]
                             ) <|>
+                        try (
+                          do (ifText, d) <- ifndefPrim
+                             st <- getState
+                             active <- return $ not $ isDefined (macroDefs st) d
+                             segs <- manyTill codeSegment (lookAhead endifPrim)
+                             (endText, _) <- endifPrim
+                             newSt <- if active then getState else return st
+                             setState newSt
+                             return [CodeSegment
+                                      (ifText ++ (concat $ concat $ map (map text) segs) ++ endText) $
+                                      Conditional [(active, concat segs)]]
+                            ) <|>
                         ( do (text, _) <- codePrim
                              st <- getState
                              return $ preprocessStr (macroDefs st) text )
@@ -107,9 +119,9 @@ preprocessLines filepath = do cs <- many codeSegment
                   ifdefPrim = tokenPrim printText incPosition test
                       where test (text, (DirectiveLine (Ifdef d))) = Just (text, d)
                             test _ = Nothing
-                  --ifndefPrim = tokenPrim printText incPosition test
-                  --    where test (text, (DirectiveLine (Ifndef d))) = Just (text, d)
-                  --          test _ = Nothing
+                  ifndefPrim = tokenPrim printText incPosition test
+                      where test (text, (DirectiveLine (Ifndef d))) = Just (text, d)
+                            test _ = Nothing
                   endifPrim = tokenPrim printText incPosition test
                       where test (text, (DirectiveLine(Endif))) = Just (text, Endif)
                             test _ = Nothing
