@@ -59,10 +59,13 @@ zipLines lns xs = ret $ foldr checkLine ([],[]) xs
           ret (errs, []) = Left errs
 
 concatLines :: String -> [(String, CLine)] -> [(String, CLine)]
-concatLines sep = foldr acc []
+concatLines sep lines = foldr acc [last lines] $ init lines
     where acc ln@(_, DirectiveLine _) lns = ln:lns
           acc (s, CodeLine) ((ss, CodeLine):lns) = (s ++ sep ++ ss, CodeLine) : lns
           acc ln@(_, CodeLine) lns = ln : lns
+
+endLines :: String -> [(String, CLine)] -> [(String, CLine)]
+endLines sep lines = (map (\(s, cl) -> (s ++ sep, cl)) $ init lines) ++ [last lines]
 
 parseCFileContent :: String -> [Either ParseError CLine]
 parseCFileContent inp = let lns = lines inp in
@@ -71,4 +74,4 @@ parseCFileContent inp = let lns = lines inp in
 lineParser :: String -> [(String, CLine)]
 lineParser s = case zipLines (lines s) $ parseCFileContent s of
                    Left _ -> fail "Parse error"
-                   Right lns -> concatLines "\n" lns
+                   Right lns -> endLines "\n" $ concatLines "\n" lns
