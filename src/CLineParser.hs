@@ -21,10 +21,11 @@ restOfLine :: Parser String
 restOfLine = try (manyTill anyChar endOfLine <* endOfLine) <|> (many anyChar <* eof)
 
 directiveParser :: Parser Directive
-directiveParser = include <|>
-                  define  <|>
-                  ifdef   <|>
-                  ifndef  <|>
+directiveParser = include        <|>
+                  define         <|>
+                  ifdef          <|>
+                  ifndef         <|>
+                  elseDirective  <|>
                   endif
 
 include = m_reserved "#include" >> (angleBracketFile <|> quoteFile)
@@ -47,6 +48,8 @@ ifdef = m_reserved "#ifdef" >> Ifdef <$> m_identifier
 ifndef = m_reserved "#ifndef" >> Ifndef <$> m_identifier
 
 endif = m_reserved "#endif" >> return Endif
+
+elseDirective = m_reserved "#else" >> return Else
 
 mainParser :: Parser CLine
 mainParser = m_whiteSpace >> line <* eof

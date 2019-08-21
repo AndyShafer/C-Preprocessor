@@ -81,58 +81,71 @@ preprocessLines filepath = do cs <- many codeSegment
                                  putState newState
                              return $ preprocessStr (macroDefs st) text
                             ) <|>
-                        try (
-                          do (ifText, d) <- ifdefPrim
+                        try ifdef <|>
+                        try ifndef <|>
+                          do (text, _) <- codePrim
                              st <- getState
-                             active <- return $ isDefined (macroDefs st) d
-                             segs <- manyTill codeSegment (lookAhead endifPrim)
-                             (endText, _) <- endifPrim
-                             newSt <- if active then getState else return st
-                             setState newSt
-                             return [CodeSegment
-                                      (ifText ++ (concat $ concat $ map (map text) segs) ++ endText) $
-                                      Conditional [(active, concat segs)]]
-                            ) <|>
-                        try (
-                          do (ifText, d) <- ifndefPrim
-                             st <- getState
-                             active <- return $ not $ isDefined (macroDefs st) d
-                             segs <- manyTill codeSegment (lookAhead endifPrim)
-                             (endText, _) <- endifPrim
-                             newSt <- if active then getState else return st
-                             setState newSt
-                             return [CodeSegment
-                                      (ifText ++ (concat $ concat $ map (map text) segs) ++ endText) $
-                                      Conditional [(active, concat segs)]]
-                            ) <|>
-                        ( do (text, _) <- codePrim
-                             st <- getState
-                             return $ preprocessStr (macroDefs st) text )
-              where 
-                  includePrim = tokenPrim printText incPosition test 
-                      where test (text, DirectiveLine (Include f)) = Just (text, f)
-                            test _ = Nothing
-                  definePrim = tokenPrim printText incPosition test
-                      where test (text, (DirectiveLine d@(Define _ _ _))) = Just (text, d)
-                            test _ = Nothing
-                  ifdefPrim = tokenPrim printText incPosition test
-                      where test (text, (DirectiveLine (Ifdef d))) = Just (text, d)
-                            test _ = Nothing
-                  ifndefPrim = tokenPrim printText incPosition test
-                      where test (text, (DirectiveLine (Ifndef d))) = Just (text, d)
-                            test _ = Nothing
---                  elsePrim = tokenPrim printText incPosition test
---                      where test (text, (DirectiveLine Else)) = Just (text, Else)
---                            test _ = Nothing
-                  endifPrim = tokenPrim printText incPosition test
-                      where test (text, (DirectiveLine Endif)) = Just (text, Endif)
-                            test _ = Nothing
-                  codePrim = tokenPrim printText incPosition test
-                      where test (text, CodeLine) = Just (text, CodeLine)
-                            test _ = Nothing
-                  incPosition pos _ _ = incSourceColumn pos (sourceColumn pos)  
-                  printText (s, ln) = s
-                  processInclude (QuoteFile f) = preprocessFile $ takeDirectory filepath </> f
+                             return $ preprocessStr (macroDefs st) text
+
+          includePrim = tokenPrim printText incPosition test 
+              where test (text, DirectiveLine (Include f)) = Just (text, f)
+                    test _ = Nothing
+
+          definePrim = tokenPrim printText incPosition test
+              where test (text, (DirectiveLine d@(Define _ _ _))) = Just (text, d)
+                    test _ = Nothing
+
+          ifdefPrim = tokenPrim printText incPosition test
+              where test (text, (DirectiveLine (Ifdef d))) = Just (text, d)
+                    test _ = Nothing
+
+          ifndefPrim = tokenPrim printText incPosition test
+              where test (text, (DirectiveLine (Ifndef d))) = Just (text, d)
+                    test _ = Nothing
+
+          elsePrim = tokenPrim printText incPosition test
+              where test (text, (DirectiveLine Else)) = Just (text, Else)
+                    test _ = Nothing
+
+          endifPrim = tokenPrim printText incPosition test
+              where test (text, (DirectiveLine Endif)) = Just (text, Endif)
+                    test _ = Nothing
+
+          codePrim = tokenPrim printText incPosition test
+              where test (text, CodeLine) = Just (text, CodeLine)
+                    test _ = Nothing
+
+          incPosition pos _ _ = incSourceColumn pos (sourceColumn pos)  
+
+          printText (s, ln) = s
+
+          processInclude (QuoteFile f) = preprocessFile $ takeDirectory filepath </> f
+
+          ifdef = ifdefBlock ifdefPrim id
+
+          ifndef = ifdefBlock ifndefPrim not
+
+          ifdefBlock start condMod = do
+              (ifText, d) <- start
+              st <- getState
+              active <- return $ condMod $ isDefined (macroDefs st) d
+              segs <- manyTill codeSegment (lookAhead $ elsePrim <|> endifPrim)
+              ifSt <- getState
+              setState st
+              maybeElse <- optionMaybe elseBlock
+              elseSt <- getState
+              (elseText, elseInfo) <- return $ case maybeElse of
+                                                 Just (elseT, elseS) -> (elseT, [(not active, elseS)])
+                                                 Nothing -> ("", [])
+              (endText, _) <- endifPrim
+              setState (if active then ifSt else elseSt)
+              return [CodeSegment
+                      (ifText ++ (concat $ concat $ map (map text) segs) ++ elseText ++ endText) $
+                      Conditional $ (active, concat segs):elseInfo]   
+
+          elseBlock = do (elseText, _) <- elsePrim
+                         segs <- manyTill codeSegment (lookAhead endifPrim)
+                         return (elseText ++ (concat $ concat $ map (map text) segs), concat segs)
                       
 
 defineToMacroDef :: [MacroDef] -> Directive -> MacroDef
