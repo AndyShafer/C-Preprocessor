@@ -20,6 +20,11 @@ maybeToList :: Maybe [a] -> [a]
 maybeToList Nothing = []
 maybeToList (Just xs) = xs
 
+isDefined :: [MacroDef] -> String -> Bool
+isDefined mds s = case find ((s==) . title) mds of
+                       Nothing -> False
+                       Just _ -> True
+
 preprocessParser :: [String] -> [MacroDef] -> Parser [CodeSegment]
 preprocessParser phs md = many1 $ codeSegmentParser phs md
 
@@ -62,31 +67,51 @@ preprocessLines :: String ->
 preprocessLines filepath = do cs <- many codeSegment
                               st <- getState
                               return (st, cs)
-    where codeSegment = try (
+    where 
+          codeSegment :: ParsecT [(String, CLine)] PreprocessState IO [CodeSegment]
+          codeSegment = try (
                           do (text, f) <- includePrim 
                              (st, segs) <- lift $ processInclude f 
                              setState st
                              return $ [CodeSegment text $ IncludeSegment segs]
-                            )
-                        <|>
+                            ) <|>
                         try (
                           do (text, d) <- definePrim 
                              st <- getState
                              let newState = addMacroDef st $ defineToMacroDef (macroDefs st) d in
                                  putState newState
                              return $ preprocessStr (macroDefs st) text
-                             --return $ [DirectiveSegment $ preprocessStr (macroDefs st) text]
-                            )
-                        <|>
-                        do (text, _) <- codePrim
-                           st <- getState
-                           return $ preprocessStr (macroDefs st) text
+                            ) <|>
+                        try (
+                          do (ifText, d) <- ifdefPrim
+                             st <- getState
+                             active <- return $ isDefined (macroDefs st) d
+                             segs <- manyTill codeSegment (lookAhead endifPrim)
+                             (endText, _) <- endifPrim
+                             newSt <- if active then getState else return st
+                             setState newSt
+                             return [CodeSegment
+                                      (ifText ++ (concat $ concat $ map (map text) segs) ++ endText) $
+                                      Conditional [(active, concat segs)]]
+                            ) <|>
+                        ( do (text, _) <- codePrim
+                             st <- getState
+                             return $ preprocessStr (macroDefs st) text )
               where 
                   includePrim = tokenPrim printText incPosition test 
                       where test (text, DirectiveLine (Include f)) = Just (text, f)
                             test _ = Nothing
                   definePrim = tokenPrim printText incPosition test
                       where test (text, (DirectiveLine d@(Define _ _ _))) = Just (text, d)
+                            test _ = Nothing
+                  ifdefPrim = tokenPrim printText incPosition test
+                      where test (text, (DirectiveLine (Ifdef d))) = Just (text, d)
+                            test _ = Nothing
+                  --ifndefPrim = tokenPrim printText incPosition test
+                  --    where test (text, (DirectiveLine (Ifndef d))) = Just (text, d)
+                  --          test _ = Nothing
+                  endifPrim = tokenPrim printText incPosition test
+                      where test (text, (DirectiveLine(Endif))) = Just (text, Endif)
                             test _ = Nothing
                   codePrim = tokenPrim printText incPosition test
                       where test (text, CodeLine) = Just (text, CodeLine)
@@ -111,6 +136,10 @@ showPreprocessed phs = concatMap expand
                          Placeholder n -> phs !! n
                          IncludeSegment segs -> showPreprocessed [] segs
                          ErrorSegment msg -> text seg
+                         Conditional groups ->
+                             concatMap (\(b, code) -> if b then showPreprocessed [] code else "") groups
+                                                         
+                                                                     
                             
 preprocess :: String -> String -> IO (PreprocessState, [CodeSegment])
 preprocess filepath content = do res <- runParserT (preprocessLines filepath) (mempty :: PreprocessState)  "" $ lineParser content

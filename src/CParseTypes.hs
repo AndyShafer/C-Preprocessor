@@ -17,7 +17,7 @@ data CodeInfo =    Plain
                  | Macro (Maybe [String]) [CodeSegment]
                  | Placeholder Int
                  | IncludeSegment [CodeSegment]
-                 | Conditional Bool [CodeSegment]
+                 | Conditional [(Bool, [CodeSegment])]
                  | ErrorSegment ErrorMsg
     deriving Show
 
