@@ -63,12 +63,11 @@ preprocessStr :: [MacroDef] -> String -> [CodeSegment]
 preprocessStr = preprocessWithPlaceHolders Nothing
 
 preprocessLines :: String -> 
-                   ParsecT [(String, CLine)] PreprocessState IO (PreprocessState, [[CodeSegment]])
+                   ParsecT [(String, CLine)] PreprocessState IO (PreprocessState, [CodeSegment])
 preprocessLines filepath = do cs <- many codeSegment
                               st <- getState
-                              return (st, cs)
+                              return (st, concat cs)
     where 
-          codeSegment :: ParsecT [(String, CLine)] PreprocessState IO [CodeSegment]
           codeSegment = try (
                           do (text, f) <- includePrim 
                              (st, segs) <- lift $ processInclude f 
@@ -122,8 +121,11 @@ preprocessLines filepath = do cs <- many codeSegment
                   ifndefPrim = tokenPrim printText incPosition test
                       where test (text, (DirectiveLine (Ifndef d))) = Just (text, d)
                             test _ = Nothing
+--                  elsePrim = tokenPrim printText incPosition test
+--                      where test (text, (DirectiveLine Else)) = Just (text, Else)
+--                            test _ = Nothing
                   endifPrim = tokenPrim printText incPosition test
-                      where test (text, (DirectiveLine(Endif))) = Just (text, Endif)
+                      where test (text, (DirectiveLine Endif)) = Just (text, Endif)
                             test _ = Nothing
                   codePrim = tokenPrim printText incPosition test
                       where test (text, CodeLine) = Just (text, CodeLine)
@@ -157,7 +159,7 @@ preprocess :: String -> String -> IO (PreprocessState, [CodeSegment])
 preprocess filepath content = do res <- runParserT (preprocessLines filepath) (mempty :: PreprocessState)  "" $ lineParser content
                                  case res of
                                      Left _ -> error "Parse error"
-                                     Right r -> return $ (id *** concat) (r :: (PreprocessState, [[CodeSegment]]))
+                                     Right r -> return $ r
 
 preprocessFile :: String -> IO (PreprocessState, [CodeSegment])
 preprocessFile filepath = do
