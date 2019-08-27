@@ -21,14 +21,15 @@ restOfLine :: Parser String
 restOfLine = try (manyTill anyChar endOfLine <* endOfLine) <|> (many anyChar <* eof)
 
 directiveParser :: Parser Directive
-directiveParser = include        <|>
-                  define         <|>
-                  ifdef          <|>
-                  ifndef         <|>
-                  elseDirective  <|>
-                  endif
+directiveParser = char '#' >> m_whiteSpace >>
+                      (include        <|>
+                      define         <|>
+                      ifdef          <|>
+                      ifndef         <|>
+                      elseDirective  <|>
+                      endif)
 
-include = m_reserved "#include" >> (angleBracketFile <|> quoteFile)
+include = m_reserved "include" >> (angleBracketFile <|> quoteFile)
 
 angleBracketFile = do f <- m_angles (many $ noneOf "<>") 
                       return (Include $ AngleBracketFile f)
@@ -36,20 +37,20 @@ angleBracketFile = do f <- m_angles (many $ noneOf "<>")
 quoteFile = do f <- m_stringLiteral
                return (Include $ QuoteFile f)
 
-define = do m_reserved "#define"
+define = do m_reserved "define"
             d <- many $ macroChar
             args <- (defineArgsParser <|> return Nothing)
             m_whiteSpace
             r <- ( try (manyTill anyChar endOfLine) <|> many anyChar)
             return $ Define d args r
 
-ifdef = m_reserved "#ifdef" >> Ifdef <$> m_identifier
+ifdef = m_reserved "ifdef" >> Ifdef <$> m_identifier
 
-ifndef = m_reserved "#ifndef" >> Ifndef <$> m_identifier
+ifndef = m_reserved "ifndef" >> Ifndef <$> m_identifier
 
-endif = m_reserved "#endif" >> return Endif
+endif = m_reserved "endif" >> return Endif
 
-elseDirective = m_reserved "#else" >> return Else
+elseDirective = m_reserved "else" >> return Else
 
 mainParser :: Parser CLine
 mainParser = m_whiteSpace >> line <* eof
@@ -59,7 +60,7 @@ zipLines lns xs = ret $ foldr checkLine ([],[]) xs
     where checkLine (Left err) acc = ((err:)***id) acc
           checkLine (Right x) acc = (id***(x:)) acc
           ret ([], xs) = Right $ zip lns xs
-          ret (errs, []) = Left errs
+          ret (errs, _) = Left errs
 
 concatLines :: String -> [(String, CLine)] -> [(String, CLine)]
 concatLines sep lines = foldr acc [last lines] $ init lines
