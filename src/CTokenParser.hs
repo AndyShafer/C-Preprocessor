@@ -22,4 +22,5 @@ TokenParser{ parens = m_parens
            , reserved = m_reserved
            , reservedOp = m_reservedOp
            , identifier = m_identifier
-           , whiteSpace = m_whiteSpace } = makeTokenParser def
+           , whiteSpace = m_whiteSpace 
+           , integer = m_integer } = makeTokenParser def

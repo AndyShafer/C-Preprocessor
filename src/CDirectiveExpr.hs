@@ -52,6 +52,7 @@ table = [ [prefixOp "+" Pos
         ]
 term = m_parens exprparser
        <|> (m_reserved "true" >> return (Constant 1))
+       <|> (m_integer >>= \n -> return $ Constant $ fromIntegral n)
        <|> (m_identifier >> return (Constant 0))
 
 infixOp op duop = Infix (m_reservedOp op >> return (Duo duop)) AssocLeft
