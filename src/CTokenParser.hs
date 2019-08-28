@@ -9,13 +9,16 @@ def = emptyDef{ commentStart = "/*"
             , commentLine = "//"
             , identStart = letter <|> char '_'
             , identLetter = alphaNum <|> char '_'
-            , reservedNames = ["#include", "#define", "#ifdef", "#ifndef", "#endif"]
+            , reservedNames = ["include", "define", "ifdef", "ifndef", "else", "endif", "true"]
+            , reservedOpNames = ["+", "*"]
             , caseSensitive = True
             }
 
-TokenParser{ angles = m_angles
+TokenParser{ parens = m_parens
+           , angles = m_angles
            , commaSep = m_commaSep
            , stringLiteral = m_stringLiteral
            , reserved = m_reserved
+           , reservedOp = m_reservedOp
            , identifier = m_identifier
            , whiteSpace = m_whiteSpace } = makeTokenParser def
