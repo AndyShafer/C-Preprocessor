@@ -7,6 +7,8 @@ data Directive = Include IncludeFile
                | Define String (Maybe [String]) String
                | Ifdef String
                | Ifndef String
+               | If String
+               | Elif String
                | Else
                | Endif
     deriving Show

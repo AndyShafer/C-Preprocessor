@@ -59,35 +59,41 @@ infixOp op duop = Infix (m_reservedOp op >> return (Duo duop)) AssocLeft
 
 prefixOp op unop = Prefix (m_reservedOp op >> return (Uno unop))
 
-evalExpr :: Expr -> Int
-evalExpr (Constant n) = n
-evalExpr (Uno Pos e) = evalExpr e
-evalExpr (Uno Neg e) = evalExpr e * (-1)
-evalExpr (Uno Not e) = case evalExpr e of
-                           0 -> 1
-                           _ -> 0
-evalExpr (Uno BitNot e) = complement $ evalExpr e
-evalExpr (Duo Times e1 e2) = eval_infix e1 e2 (*)
-evalExpr (Duo Divide e1 e2) = eval_infix e1 e2 quot
-evalExpr (Duo Mod e1 e2) = eval_infix e1 e2 mod
-evalExpr (Duo Plus e1 e2) = eval_infix e1 e2 (+)
-evalExpr (Duo Minus e1 e2) = eval_infix e1 e2 (-)
-evalExpr (Duo ShiftL e1 e2) = eval_infix e1 e2 shiftL
-evalExpr (Duo ShiftR e1 e2) = eval_infix e1 e2 shiftR
-evalExpr (Duo Less e1 e2) = eval_infix e1 e2 (\n1 n2 -> boolToInt $ n1 < n2)
-evalExpr (Duo Greater e1 e2) = eval_infix e1 e2 (\n1 n2 -> boolToInt $ n1 > n2)
-evalExpr (Duo LTEQ e1 e2) = eval_infix e1 e2 (\n1 n2 -> boolToInt $ n1 <= n2)
-evalExpr (Duo GTEQ e1 e2) = eval_infix e1 e2 (\n1 n2 -> boolToInt $ n1 >= n2)
-evalExpr (Duo Equal e1 e2) = eval_infix e1 e2 (\n1 n2 -> boolToInt $ n1 == n2)
-evalExpr (Duo NotEqual e1 e2) = eval_infix e1 e2 (\n1 n2 -> boolToInt $ n1 /= n2)
-evalExpr (Duo BitAnd e1 e2) = eval_infix e1 e2 (.&.)
-evalExpr (Duo BitXor e1 e2) = eval_infix e1 e2 xor
-evalExpr (Duo BitOr e1 e2) = eval_infix e1 e2 (.|.)
-evalExpr (Duo And e1 e2) = eval_infix e1 e2 (\n1 n2 -> if (n1 /= 0) && (n2 /= 0) then 1 else 0)
-evalExpr (Duo Or e1 e2) = eval_infix e1 e2 (\n1 n2 -> if (n1 /= 0) || (n2 /= 0) then 1 else 0)
+evalExpr :: String -> Int
+evalExpr inp = case parse exprparser "" inp of
+                   Left _ -> error "Failed to parse expression"
+                   Right e -> evalExpr' e
+
+evalExpr' :: Expr -> Int
+evalExpr' (Constant n) = n
+evalExpr' (Uno Pos e) = eval_prefix e id
+evalExpr' (Uno Neg e) = eval_prefix e (* (-1))
+evalExpr' (Uno Not e) = eval_prefix e (\n -> if n == 0 then 1 else 0)
+evalExpr' (Uno BitNot e) = eval_prefix e complement
+evalExpr' (Duo Times e1 e2) = eval_infix e1 e2 (*)
+evalExpr' (Duo Divide e1 e2) = eval_infix e1 e2 quot
+evalExpr' (Duo Mod e1 e2) = eval_infix e1 e2 mod
+evalExpr' (Duo Plus e1 e2) = eval_infix e1 e2 (+)
+evalExpr' (Duo Minus e1 e2) = eval_infix e1 e2 (-)
+evalExpr' (Duo ShiftL e1 e2) = eval_infix e1 e2 shiftL
+evalExpr' (Duo ShiftR e1 e2) = eval_infix e1 e2 shiftR
+evalExpr' (Duo Less e1 e2) = eval_infix e1 e2 (\n1 n2 -> boolToInt $ n1 < n2)
+evalExpr' (Duo Greater e1 e2) = eval_infix e1 e2 (\n1 n2 -> boolToInt $ n1 > n2)
+evalExpr' (Duo LTEQ e1 e2) = eval_infix e1 e2 (\n1 n2 -> boolToInt $ n1 <= n2)
+evalExpr' (Duo GTEQ e1 e2) = eval_infix e1 e2 (\n1 n2 -> boolToInt $ n1 >= n2)
+evalExpr' (Duo Equal e1 e2) = eval_infix e1 e2 (\n1 n2 -> boolToInt $ n1 == n2)
+evalExpr' (Duo NotEqual e1 e2) = eval_infix e1 e2 (\n1 n2 -> boolToInt $ n1 /= n2)
+evalExpr' (Duo BitAnd e1 e2) = eval_infix e1 e2 (.&.)
+evalExpr' (Duo BitXor e1 e2) = eval_infix e1 e2 xor
+evalExpr' (Duo BitOr e1 e2) = eval_infix e1 e2 (.|.)
+evalExpr' (Duo And e1 e2) = eval_infix e1 e2 (\n1 n2 -> if (n1 /= 0) && (n2 /= 0) then 1 else 0)
+evalExpr' (Duo Or e1 e2) = eval_infix e1 e2 (\n1 n2 -> if (n1 /= 0) || (n2 /= 0) then 1 else 0)
+
+eval_prefix :: Expr -> (Int -> Int) -> Int
+eval_prefix e op = op $ evalExpr' e
 
 eval_infix :: Expr -> Expr -> (Int -> Int -> Int) -> Int
-eval_infix e1 e2 op = (evalExpr e1) `op` (evalExpr e2)
+eval_infix e1 e2 op = (evalExpr' e1) `op` (evalExpr' e2)
 
 boolToInt :: Bool -> Int
 boolToInt True = 1

@@ -14,6 +14,7 @@ import CLineParser
 import CParseTypes
 import CTokenParser
 import CMacroParser
+import CDirectiveExpr
 import Common
 
 maybeToList :: Maybe [a] -> [a]
@@ -83,6 +84,8 @@ preprocessLines filepath = do cs <- many codeSegment
                             ) <|>
                         try ifdef <|>
                         try ifndef <|>
+                        try ifBlock <|>
+
                           do (text, _) <- codePrim
                              st <- getState
                              return $ preprocessStr (macroDefs st) text
@@ -103,12 +106,21 @@ preprocessLines filepath = do cs <- many codeSegment
               where test (text, (DirectiveLine (Ifndef d))) = Just (text, d)
                     test _ = Nothing
 
+          
+          ifPrim = tokenPrim printText incPosition test
+              where test (text, (DirectiveLine (If e))) = Just (text, e)
+                    test _ = Nothing
+
+          elifPrim = tokenPrim printText incPosition test
+              where test (text, (DirectiveLine (Elif e))) = Just (text, e)
+                    test _ = Nothing
+
           elsePrim = tokenPrim printText incPosition test
-              where test (text, (DirectiveLine Else)) = Just (text, Else)
+              where test (text, (DirectiveLine Else)) = Just (text, "")
                     test _ = Nothing
 
           endifPrim = tokenPrim printText incPosition test
-              where test (text, (DirectiveLine Endif)) = Just (text, Endif)
+              where test (text, (DirectiveLine Endif)) = Just (text, "")
                     test _ = Nothing
 
           codePrim = tokenPrim printText incPosition test
@@ -143,6 +155,40 @@ preprocessLines filepath = do cs <- many codeSegment
                       (ifText ++ (concat $ concat $ map (map text) segs) ++ elseText ++ endText) $
                       Conditional $ (active, concat segs):elseInfo]   
 
+          ifBlock = do
+              (ifText, e) <- ifPrim
+              st <- getState
+              active <- return $ (/= 0) $ evalExpr $ showPreprocessed [] $ preprocessStr (macroDefs st) e
+              segs <- manyTill codeSegment (lookAhead $ elifPrim <|> elsePrim <|> endifPrim)
+              ifSt <- getState
+              elifs <- many (setState st >> elifBlock)
+              setState st
+              maybeElse <- optionMaybe elseBlock
+              elseSt <- getState
+              (endText, _) <- endifPrim
+              setState (if active then ifSt else
+                            case find (\(a, _, _, _) -> a) elifs of
+                                Just (_, _, _, elifSt) -> elifSt
+                                Nothing -> elseSt)
+              elifs' <- return $ map (\(elifActive, elifSegs, elifT, _) ->
+                                          (elifT, (elifActive, elifSegs))) elifs
+              (elseText, elseInfo) <- return $ case maybeElse of
+                                                 Just (elseT, elseS) -> (elseT, [(not active, elseS)])
+                                                 Nothing -> ("", [])
+              return [CodeSegment
+                      (ifText ++ (concat $ concat $ map (map text) segs) ++
+                          (concat $ map fst elifs') ++ elseText ++ endText) $
+                      Conditional $ (active, concat segs) :
+                          (map snd elifs') ++ elseInfo]   
+
+          elifBlock = do
+              (elifText, e) <- elifPrim
+              st <- getState
+              active <- return $ (/= 0) $ evalExpr $ showPreprocessed [] $ preprocessStr (macroDefs st) e
+              segs <- manyTill codeSegment (lookAhead $ elifPrim <|> elsePrim <|> endifPrim)
+              newSt <- getState
+              return (active, concat segs, elifText ++ (concat $ concat $ map (map text) segs), newSt)
+
           elseBlock = do (elseText, _) <- elsePrim
                          segs <- manyTill codeSegment (lookAhead endifPrim)
                          return (elseText ++ (concat $ concat $ map (map text) segs), concat segs)
@@ -163,10 +209,9 @@ showPreprocessed phs = concatMap expand
                          Placeholder n -> phs !! n
                          IncludeSegment segs -> showPreprocessed [] segs
                          ErrorSegment msg -> text seg
-                         Conditional groups ->
-                             concatMap (\(b, code) -> if b then showPreprocessed [] code else "") groups
-                                                         
-                                                                     
+                         Conditional groups -> case find (\(b, _) -> b) groups of
+                                                   Just (_, code) -> showPreprocessed [] code
+                                                   Nothing -> ""
                             
 preprocess :: String -> String -> IO (PreprocessState, [CodeSegment])
 preprocess filepath content = do res <- runParserT (preprocessLines filepath) (mempty :: PreprocessState)  "" $ lineParser content

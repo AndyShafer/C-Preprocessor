@@ -22,8 +22,10 @@ restOfLine = try (manyTill anyChar endOfLine <* endOfLine) <|> (many anyChar <* 
 
 directiveParser :: Parser Directive
 directiveParser = char '#' >> m_whiteSpace >>
-                      (include        <|>
+                      (include       <|>
                       define         <|>
+                      ifDirective    <|>
+                      elif           <|>
                       ifdef          <|>
                       ifndef         <|>
                       elseDirective  <|>
@@ -45,6 +47,10 @@ define = do m_reserved "define"
             return $ Define d args r
 
 ifdef = m_reserved "ifdef" >> Ifdef <$> m_identifier
+
+ifDirective = m_reserved "if" >> If <$> ( try (manyTill anyChar endOfLine) <|> many anyChar)
+
+elif = m_reserved "elif" >> Elif <$> ( try (manyTill anyChar endOfLine) <|> many anyChar)
 
 ifndef = m_reserved "ifndef" >> Ifndef <$> m_identifier
 
