@@ -9,18 +9,35 @@ import Text.Parsec.String
 import CTokenParser
 import CParseTypes
 import CMacroParser
+import Common
 
 showIncludeFile :: IncludeFile -> String
 showIncludeFile (AngleBracketFile f) = '<' : f ++ ">"
 showIncludeFile (QuoteFile f) = '"' : f ++ "\""
 
 line :: Parser CLine
-line = try $ DirectiveLine <$> directiveParser <|> return CodeLine <* many anyChar
+line = (lookAhead anyChar) >> (try $ DirectiveLine <$> directiveParser <|> return CodeLine <* restOfLine)
+
+--restOfLine :: Parser String
+--restOfLine = sepBy
+--                 (try (manyTill anyChar endOfLine <* endOfLine) <|> (many anyChar <* eof))
+--                 lineContinue
+
 
 restOfLine :: Parser String
-restOfLine = try (manyTill anyChar endOfLine <* endOfLine) <|> (many anyChar <* eof)
+restOfLine = manyTill anyChar ((endOfLine >> return ()) <|> eof)
 
-directiveParser :: Parser Directive
+restOfLineWithExtentions :: Parser String
+restOfLineWithExtentions = (concat . intersperse " ") <$>
+             sepBy restOfLineWithExtentions' lineContinue
+
+restOfLineWithExtentions' :: Parser String
+restOfLineWithExtentions' = manyTill anyChar
+                       ((try $ lookAhead lineContinue >> return ()) <|> (endOfLine >> return ()) <|> eof)
+
+lineContinue :: Parser Char
+lineContinue = char '\\' >> endOfLine >> return ' '
+
 directiveParser = char '#' >> m_whiteSpace >>
                       (include       <|>
                       define         <|>
@@ -43,7 +60,7 @@ define = do m_reserved "define"
             d <- many $ macroChar
             args <- (defineArgsParser <|> return Nothing)
             m_whiteSpace
-            r <- ( try (manyTill anyChar endOfLine) <|> many anyChar)
+            r <- restOfLineWithExtentions
             return $ Define d args r
 
 ifdef = m_reserved "ifdef" >> Ifdef <$> m_identifier
@@ -58,8 +75,8 @@ endif = m_reserved "endif" >> return Endif
 
 elseDirective = m_reserved "else" >> return Else
 
-mainParser :: Parser CLine
-mainParser = m_whiteSpace >> line <* eof
+mainParser :: Parser [(String, CLine)]
+mainParser = many (includeConsumed line) <* eof
 
 zipLines :: [String] -> [Either ParseError CLine] -> Either [ParseError] [(String, CLine)]
 zipLines lns xs = ret $ foldr checkLine ([],[]) xs
@@ -74,14 +91,10 @@ concatLines sep lines = foldr acc [last lines] $ init lines
           acc (s, CodeLine) ((ss, CodeLine):lns) = (s ++ sep ++ ss, CodeLine) : lns
           acc ln@(_, CodeLine) lns = ln : lns
 
-endLines :: String -> [(String, CLine)] -> [(String, CLine)]
-endLines sep lines = (map (\(s, cl) -> (s ++ sep, cl)) $ init lines) ++ [last lines]
-
-parseCFileContent :: String -> [Either ParseError CLine]
-parseCFileContent inp = let lns = lines inp in
-                            map (parse mainParser "" ) lns
+parseCFileContent :: String -> Either ParseError [(String, CLine)]
+parseCFileContent inp = parse mainParser "" inp
 
 lineParser :: String -> [(String, CLine)]
-lineParser s = case zipLines (lines s) $ parseCFileContent s of
+lineParser s = case parseCFileContent s of
                    Left _ -> fail "Parse error"
-                   Right lns -> endLines "\n" $ concatLines "\n" lns
+                   Right lns -> concatLines "" lns
