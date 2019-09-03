@@ -35,12 +35,13 @@ macroParser :: [MacroDef] -> Parser CodeSegment
 macroParser md = do (text, (mac, argList)) <- includeConsumed possibleMacro
                     case find ((mac==) . title) md of
                         Nothing -> fail "Macro does not exist"
-                        Just m -> if (length <$> argList) == parameters m then
-                                      return $ CodeSegment text $ Macro argList (redefine m) else
-                                      return $ CodeSegment text $ ErrorSegment "Incorrect number of arguments"
+                        Just m | (length <$> argList) == parameters m -> 
+                                     return $ CodeSegment text $ Macro argList (redefine m) 
+                               | argList == Just [""] && parameters m == Just 0 ->
+                                     return $ CodeSegment text $ Macro (Just []) (redefine m)
+                               | otherwise ->      
+                                     return $ CodeSegment text $ ErrorSegment "Incorrect number of arguments"
     where possibleMacro = do
               mac <- many1 macroChar
               argList <- macroArgsParser
               return (mac, argList)
-
-
