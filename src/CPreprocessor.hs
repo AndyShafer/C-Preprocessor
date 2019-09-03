@@ -205,7 +205,10 @@ showPreprocessed :: [String] -> [CodeSegment] -> String
 showPreprocessed phs = concatMap expand
     where expand seg = case info seg of
                          Plain -> text seg
-                         Macro phs' segs -> showPreprocessed (maybeToList phs') segs
+                         -- Append whitespace to ensure tokens are separated after expanding.
+                         -- Might want to change concatMap to a foldr to we can check if the next
+                         -- segment starts with whitespace.
+                         Macro phs' segs -> showPreprocessed (maybeToList phs') segs ++ " "
                          Placeholder n -> phs !! n
                          IncludeSegment segs -> showPreprocessed [] segs
                          ErrorSegment msg -> text seg
