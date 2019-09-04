@@ -41,6 +41,27 @@ codeSegmentParser phs md = try (includeConsumed m_stringLiteral >>= \(s, _) ->
                            (anyChar >>= \c ->
                                return $ CodeSegment (c:[]) Plain)
 
+macroParser :: [MacroDef] -> Parser CodeSegment
+macroParser md = do (text, (mac, argList)) <- includeConsumed possibleMacro
+                    case L.find ((mac==) . title) md of
+                        Nothing -> fail "Macro does not exist"
+                        Just m | (length <$> argList) == parameters m -> 
+                                     return $ CodeSegment text
+                                            $ Macro (expandedArgs argList) (expandedRedefine argList $ redefine m) 
+                               | argList == Just [""] && parameters m == Just 0 ->
+                                     return $ CodeSegment text
+                                            $ Macro (Just []) (expandedRedefine (Just []) $ redefine m)
+                               | otherwise ->      
+                                     return $ CodeSegment text $ ErrorSegment "Incorrect number of arguments"
+
+    where possibleMacro = do
+              mac <- many1 macroChar
+              argList <- macroArgsParser
+              return (mac, argList)
+          expandedArgs (Just args) = Just $ map (preprocessStr md) args
+          expandedArgs Nothing = Nothing
+          expandedRedefine phs r = preprocessWithPlaceHolders phs md r
+
 placeHolderParser :: [String] -> Parser CodeInfo
 placeHolderParser phs = m_identifier >>=
                         \id -> case id `elemIndex` phs of
@@ -227,13 +248,13 @@ preprocessLines filepath = do cs <- many codeSegment
                       
 
 defineToMacroDef :: [MacroDef] -> Directive -> MacroDef
-defineToMacroDef md (Define s p r) = MacroDef s (length <$> p) $ preprocessWithPlaceHolders p md r
+defineToMacroDef md (Define d p r) = MacroDef d (length <$> p) r
 defineToMacroDef _ _ = error "Not a define directive"
 
 showOriginal :: [CodeSegment] -> String
 showOriginal = concatMap text          
 
-showPreprocessed :: [String] -> [CodeSegment] -> String
+showPreprocessed :: [[CodeSegment]] -> [CodeSegment] -> String
 showPreprocessed phs = concatMap expand
     where expand seg = case info seg of
                          Plain -> text seg
@@ -241,7 +262,7 @@ showPreprocessed phs = concatMap expand
                          -- Might want to change concatMap to a foldr to we can check if the next
                          -- segment starts with whitespace.
                          Macro phs' segs -> showPreprocessed (maybeToList phs') segs ++ " "
-                         Placeholder n -> phs !! n
+                         Placeholder n -> showPreprocessed [] $ phs !! n
                          IncludeSegment segs -> showPreprocessed [] segs
                          ErrorSegment msg -> text seg
                          Conditional groups -> case L.find (\(b, _) -> b) groups of

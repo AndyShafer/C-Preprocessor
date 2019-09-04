@@ -8,7 +8,7 @@ import Text.Parsec.String
 
 import CTokenParser
 import CParseTypes
-import CMacroParser
+import CMacroParser (macroChar, defineArgsParser)
 import Common
 
 showIncludeFile :: IncludeFile -> String
