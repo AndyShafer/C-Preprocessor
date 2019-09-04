@@ -47,6 +47,7 @@ lineContinue = char '\\' >> endOfLine >> return ' '
 directiveParser = char '#' >> m_whiteSpace >>
                       (include       <|>
                       define         <|>
+                      undef          <|>
                       ifDirective    <|>
                       elif           <|>
                       ifdef          <|>
@@ -69,6 +70,8 @@ define = do m_reserved "define"
             m_whiteSpace
             r <- restOfLineWithExtensions
             return $ Define d args r
+
+undef = m_reserved "undef" >> parseDirectiveContent (Undef <$> m_identifier)
 
 ifdef = m_reserved "ifdef" >> parseDirectiveContent (Ifdef <$> m_identifier)
 

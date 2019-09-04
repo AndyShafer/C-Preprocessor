@@ -5,6 +5,7 @@ data CLine = DirectiveLine Directive | CodeLine
 
 data Directive = Include IncludeFile 
                | Define String (Maybe [String]) String
+               | Undef String
                | Ifdef String
                | Ifndef String
                | If String

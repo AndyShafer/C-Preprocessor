@@ -90,6 +90,12 @@ preprocessLines filepath = do cs <- many codeSegment
                              return $ preprocessStr (macroDefs st) text
                             ) <|>
                         try (
+                          do (text, d) <- undefPrim
+                             st <- getState
+                             putState st{ macroDefs = undefine (macroDefs st) d }
+                             return $ [CodeSegment text Plain]
+                            ) <|>
+                        try (
                           do (text, e) <- errorPrim
                              return $ [CodeSegment text $ ErrorSegment e]
                             ) <|>
@@ -106,6 +112,10 @@ preprocessLines filepath = do cs <- many codeSegment
 
           definePrim = tokenPrim printText incPosition test
               where test (text, (DirectiveLine d@(Define _ _ _))) = Just (text, d)
+                    test _ = Nothing
+
+          undefPrim = tokenPrim printText incPosition test
+              where test (text, (DirectiveLine (Undef d))) = Just (text, d)
                     test _ = Nothing
 
           ifdefPrim = tokenPrim printText incPosition test
@@ -152,6 +162,8 @@ preprocessLines filepath = do cs <- many codeSegment
               case fp of
                   Nothing -> return $ (mempty, [CodeSegment f $ ErrorSegment "File not found"])
                   Just fp' -> preprocessFile fp'
+
+          undefine mds m = filter ((/=m) . title) mds
 
           ifdef = ifdefBlock ifdefPrim id
 
