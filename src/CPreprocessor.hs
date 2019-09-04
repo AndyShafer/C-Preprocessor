@@ -89,10 +89,13 @@ preprocessLines filepath = do cs <- many codeSegment
                                  putState newState
                              return $ preprocessStr (macroDefs st) text
                             ) <|>
+                        try (
+                          do (text, e) <- errorPrim
+                             return $ [CodeSegment text $ ErrorSegment e]
+                            ) <|>
                         try ifdef <|>
                         try ifndef <|>
                         try ifBlock <|>
-
                           do (text, _) <- codePrim
                              st <- getState
                              return $ preprocessStr (macroDefs st) text
@@ -128,6 +131,10 @@ preprocessLines filepath = do cs <- many codeSegment
 
           endifPrim = tokenPrim printText incPosition test
               where test (text, (DirectiveLine Endif)) = Just (text, "")
+                    test _ = Nothing
+
+          errorPrim = tokenPrim printText incPosition test
+              where test (text, (DirectiveLine (ErrorDirective e))) = Just (text, e)
                     test _ = Nothing
 
           codePrim = tokenPrim printText incPosition test

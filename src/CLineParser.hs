@@ -52,7 +52,8 @@ directiveParser = char '#' >> m_whiteSpace >>
                       ifdef          <|>
                       ifndef         <|>
                       elseDirective  <|>
-                      endif)
+                      endif          <|>
+                      errorDirective)
 
 include = m_reserved "include" >> parseDirectiveContent (angleBracketFile <|> quoteFile)
 
@@ -80,6 +81,8 @@ ifndef = m_reserved "ifndef" >> parseDirectiveContent (Ifndef <$> m_identifier)
 endif = m_reserved "endif" >> return Endif 
 
 elseDirective = m_reserved "else" >> return Else
+
+errorDirective = m_reserved "error" >> parseDirectiveContent (ErrorDirective <$> m_stringLiteral)
 
 mainParser :: Parser [(String, CLine)]
 mainParser = many (includeConsumed line) <* eof

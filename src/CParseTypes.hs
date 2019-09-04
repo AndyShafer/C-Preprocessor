@@ -11,6 +11,7 @@ data Directive = Include IncludeFile
                | Elif String
                | Else
                | Endif
+               | ErrorDirective String
     deriving Show
 
 data IncludeFile = AngleBracketFile String | QuoteFile String
