@@ -35,19 +35,27 @@ data CodeSegment = CodeSegment { text :: String
                                }
     deriving Show
 
-data PreprocessState = PreprocessState { macroDefs :: [MacroDef] }
+data PreprocessState = PreprocessState { macroDefs :: [MacroDef]
+                                       , includeDirs :: [FilePath]
+                                       }
     deriving Show
 
 instance Semigroup PreprocessState where
-    (<>) (PreprocessState x1) (PreprocessState x2) = PreprocessState (x1++x2)
+    (<>) (PreprocessState md1 id1) (PreprocessState md2 id2) = PreprocessState (md1++md2) (id1++id2)
 
 instance Monoid PreprocessState where
-    mempty = PreprocessState []
+    mempty = PreprocessState [] []
 
 emptyState :: PreprocessState
-emptyState = PreprocessState []
+emptyState = PreprocessState [] []
+
+startState :: PreprocessState
+startState = addIncludeDirList emptyState ["/usr/local/include", "/usr/include", "/usr/include/x86_64-linux-gnu", "/usr/lib/gcc/x86_64-linux-gnu/8/include", "/usr/lib/gcc/x86_64-linux-gnu/8/include-fixed"]
 
 addMacroDef :: PreprocessState -> MacroDef -> PreprocessState
 addMacroDef st md = st { macroDefs = (md : macroDefs st) }
+
+addIncludeDirList :: PreprocessState -> [FilePath] -> PreprocessState
+addIncludeDirList st inc = st { includeDirs = includeDirs st ++ inc }
 
 type ErrorMsg = String

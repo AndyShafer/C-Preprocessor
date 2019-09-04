@@ -4,12 +4,12 @@ import Control.Applicative hiding ((<|>),many)
 import Control.Arrow ((***))
 import Control.Monad
 import Control.Monad.Trans
-import Data.List
+import Data.List as L
 import Text.Parsec
 import Text.Parsec.String
 import Text.Parsec.Pos
 import System.FilePath
-
+import System.FilePath.Find as F
 import CLineParser
 import CParseTypes
 import CTokenParser
@@ -22,7 +22,7 @@ maybeToList Nothing = []
 maybeToList (Just xs) = xs
 
 isDefined :: [MacroDef] -> String -> Bool
-isDefined mds s = case find ((s==) . title) mds of
+isDefined mds s = case L.find ((s==) . title) mds of
                        Nothing -> False
                        Just _ -> True
 
@@ -49,6 +49,11 @@ placeHolderParser phs = m_identifier >>=
 showArgList :: Maybe [String] -> String
 showArgList Nothing = ""
 showArgList (Just args) = '(' : (concat $ intersperse ", " args) ++ ")"
+
+findFilePath :: [FilePath] -> FilePath -> IO (Maybe FilePath)
+findFilePath dirs file = safeHead <$> concat <$> mapM (F.find always (contains file)) dirs
+    where safeHead (x:xs) = Just $ x </> file
+          safeHead [] = Nothing
                     
 preprocessWithPlaceHolders :: Maybe [String] -> [MacroDef] -> String -> [CodeSegment]
 preprocessWithPlaceHolders ph md s = case parse (preprocessParser phs md) "" s of
@@ -71,8 +76,9 @@ preprocessLines filepath = do cs <- many codeSegment
     where 
           codeSegment = try (
                           do (text, f) <- includePrim 
-                             (st, segs) <- lift $ processInclude f 
-                             setState st
+                             st <- getState
+                             (st', segs) <- lift $ processInclude (includeDirs st) f
+                             setState st'
                              return $ [CodeSegment text $ IncludeSegment segs]
                             ) <|>
                         try (
@@ -131,7 +137,12 @@ preprocessLines filepath = do cs <- many codeSegment
 
           printText (s, ln) = s
 
-          processInclude (QuoteFile f) = preprocessFile $ takeDirectory filepath </> f
+          processInclude _ (QuoteFile f) = preprocessFile $ takeDirectory filepath </> f
+          processInclude dirs (AngleBracketFile f) = do
+              fp <- findFilePath dirs f
+              case fp of
+                  Nothing -> return $ (mempty, [CodeSegment f $ ErrorSegment "File not found"])
+                  Just fp' -> preprocessFile fp'
 
           ifdef = ifdefBlock ifdefPrim id
 
@@ -167,7 +178,7 @@ preprocessLines filepath = do cs <- many codeSegment
               elseSt <- getState
               (endText, _) <- endifPrim
               setState (if active then ifSt else
-                            case find (\(a, _, _, _) -> a) elifs of
+                            case L.find (\(a, _, _, _) -> a) elifs of
                                 Just (_, _, _, elifSt) -> elifSt
                                 Nothing -> elseSt)
               elifs' <- return $ map (\(elifActive, elifSegs, elifT, _) ->
@@ -212,12 +223,12 @@ showPreprocessed phs = concatMap expand
                          Placeholder n -> phs !! n
                          IncludeSegment segs -> showPreprocessed [] segs
                          ErrorSegment msg -> text seg
-                         Conditional groups -> case find (\(b, _) -> b) groups of
+                         Conditional groups -> case L.find (\(b, _) -> b) groups of
                                                    Just (_, code) -> showPreprocessed [] code
                                                    Nothing -> ""
                             
 preprocess :: String -> String -> IO (PreprocessState, [CodeSegment])
-preprocess filepath content = do res <- runParserT (preprocessLines filepath) (mempty :: PreprocessState)  "" $ lineParser content
+preprocess filepath content = do res <- runParserT (preprocessLines filepath) startState "" $ lineParser content
                                  case res of
                                      Left _ -> error "Parse error"
                                      Right r -> return $ r

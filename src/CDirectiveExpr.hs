@@ -61,7 +61,7 @@ prefixOp op unop = Prefix (m_reservedOp op >> return (Uno unop))
 
 evalExpr :: String -> Int
 evalExpr inp = case parse exprparser "" inp of
-                   Left _ -> error "Failed to parse expression"
+                   Left _ -> error ("Failed to parse expression: " ++ inp)
                    Right e -> evalExpr' e
 
 evalExpr' :: Expr -> Int
