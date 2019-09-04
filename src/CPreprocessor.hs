@@ -9,6 +9,7 @@ import Text.Parsec
 import Text.Parsec.String
 import Text.Parsec.Pos
 import System.FilePath
+import System.Directory
 import System.FilePath.Find as F
 import CLineParser
 import CParseTypes
@@ -51,7 +52,7 @@ showArgList Nothing = ""
 showArgList (Just args) = '(' : (concat $ intersperse ", " args) ++ ")"
 
 findFilePath :: [FilePath] -> FilePath -> IO (Maybe FilePath)
-findFilePath dirs file = safeHead <$> concat <$> mapM (F.find always (contains file)) dirs
+findFilePath dirs file = safeHead <$> concat <$> mapM (F.find ((==1) <$> depth) (contains file)) dirs
     where safeHead (x:xs) = Just $ x </> file
           safeHead [] = Nothing
                     
@@ -137,8 +138,9 @@ preprocessLines filepath = do cs <- many codeSegment
 
           printText (s, ln) = s
 
-          processInclude _ (QuoteFile f) = preprocessFile $ takeDirectory filepath </> f
-          processInclude dirs (AngleBracketFile f) = do
+          processInclude dirs (QuoteFile f) = includeFile (takeDirectory filepath : dirs) f
+          processInclude dirs (AngleBracketFile f) = includeFile dirs f
+          includeFile dirs f = do
               fp <- findFilePath dirs f
               case fp of
                   Nothing -> return $ (mempty, [CodeSegment f $ ErrorSegment "File not found"])
