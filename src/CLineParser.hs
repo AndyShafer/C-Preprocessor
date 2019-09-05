@@ -18,31 +18,11 @@ showIncludeFile (QuoteFile f) = '"' : f ++ "\""
 line :: Parser CLine
 line = (lookAhead anyChar) >> (try $ DirectiveLine <$> directiveParser <|> return CodeLine <* restOfLine)
 
---restOfLine :: Parser String
---restOfLine = sepBy
---                 (try (manyTill anyChar endOfLine <* endOfLine) <|> (many anyChar <* eof))
---                 lineContinue
-
-
-restOfLine :: Parser String
-restOfLine = manyTill anyChar ((endOfLine >> return ()) <|> eof)
-
-restOfLineWithExtensions :: Parser String
-restOfLineWithExtensions = (concat . intersperse " ") <$>
-             sepBy restOfLineWithExtensions' lineContinue
-
-restOfLineWithExtensions' :: Parser String
-restOfLineWithExtensions' = manyTill anyChar
-                       ((try $ lookAhead lineContinue >> return ()) <|> (endOfLine >> return ()) <|> eof)
-
 parseDirectiveContent :: Parser a -> Parser a
 parseDirectiveContent parser = do content <- restOfLineWithExtensions
                                   case parse (m_whiteSpace >> parser) "" content of
                                        Left _ -> fail "Could not parse directive content"
                                        Right res -> return res
-
-lineContinue :: Parser Char
-lineContinue = char '\\' >> endOfLine >> return ' '
 
 directiveParser = char '#' >> m_whiteSpace >>
                       (include       <|>

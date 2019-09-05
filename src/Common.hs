@@ -3,6 +3,8 @@ module Common where
 import Text.Parsec
 import Text.Parsec.Pos
 import Text.Parsec.String
+import CTokenParser
+import Data.List
 
 -- Returns the result of the parser and the entire string that was consumed.
 includeConsumed :: Parser a -> Parser (String, a)
@@ -27,3 +29,31 @@ substringParser start end = do many $ notPos start
                             fail "Reached end" else
                             anyChar
 
+restOfLine :: Parser String
+restOfLine = manyTill anyCharSkipComment ((endOfLine >> return ()) <|> eof)
+
+restOfLineWithExtensions :: Parser String
+restOfLineWithExtensions = (concat . intersperse " ") <$>
+             sepBy restOfLineWithExtensions' lineContinue
+
+restOfLineWithExtensions' :: Parser String
+restOfLineWithExtensions' = manyTill anyCharSkipComment
+                       ((try $ lookAhead lineContinue >> return ()) <|> (endOfLine >> return ()) <|> eof)
+
+lineContinue :: Parser Char
+lineContinue = char '\\' >> endOfLine >> return ' '
+
+-- Parse any char but if a comment is found comsume it and return a space for
+-- block comments or a newline for line comments.
+anyCharSkipComment :: Parser Char
+anyCharSkipComment = try (
+                       do string "/*"
+                          manyTill anyChar $ string "*/"
+                          return ' '
+                         ) <|>
+                     try (
+                       do string "//"
+                          manyTill anyChar ((endOfLine >> return ()) <|> eof)
+                          return '\n'
+                         ) <|>
+                     anyChar
