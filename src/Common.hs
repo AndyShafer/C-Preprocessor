@@ -43,17 +43,16 @@ restOfLineWithExtensions' = manyTill anyCharSkipComment
 lineContinue :: Parser Char
 lineContinue = char '\\' >> endOfLine >> return ' '
 
--- Parse any char but if a comment is found comsume it and return a space for
--- block comments or a newline for line comments.
+-- Parse any char but if a comment is found comsume it and return a space.
 anyCharSkipComment :: Parser Char
-anyCharSkipComment = try (
-                       do string "/*"
-                          manyTill anyChar $ string "*/"
-                          return ' '
-                         ) <|>
-                     try (
-                       do string "//"
-                          manyTill anyChar ((endOfLine >> return ()) <|> eof)
-                          return '\n'
-                         ) <|>
-                     anyChar
+anyCharSkipComment = try commentParser <|> anyChar
+
+commentParser :: Parser Char
+commentParser = try (
+                  do string "/*"
+                     manyTill anyChar $ string "*/"
+                     return ' '
+                    ) <|>
+                  do string "//"
+                     manyTill anyChar (lookAhead (endOfLine >> return ()) <|> eof)
+                     return ' '

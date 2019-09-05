@@ -31,7 +31,9 @@ preprocessParser :: [String] -> [MacroDef] -> Parser [CodeSegment]
 preprocessParser phs md = many1 $ codeSegmentParser phs md
 
 codeSegmentParser :: [String] -> [MacroDef] -> Parser CodeSegment
-codeSegmentParser phs md = try (includeConsumed m_stringLiteral >>= \(s, _) ->
+codeSegmentParser phs md = try (includeConsumed commentParser >>= \(s, _) ->
+                               return $ CodeSegment s Plain) <|>
+                           try (includeConsumed m_stringLiteral >>= \(s, _) ->
                                return $ CodeSegment s Plain)  <|>
                            try ((includeConsumed $ placeHolderParser phs) >>= \(s, ph) ->
                                return $ CodeSegment s ph)  <|>
