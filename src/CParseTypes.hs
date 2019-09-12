@@ -13,6 +13,7 @@ data Directive = Include IncludeFile
                | Else
                | Endif
                | ErrorDirective String
+               | WarningDirective String
     deriving Show
 
 data IncludeFile = AngleBracketFile String | QuoteFile String
@@ -24,6 +25,7 @@ data CodeInfo =    Plain
                  | IncludeSegment [CodeSegment]
                  | Conditional [(Bool, [CodeSegment])]
                  | ErrorSegment ErrorMsg
+                 | WarningSegment WarningMsg
     deriving Show
 
 data MacroDef = MacroDef { title :: String
@@ -61,3 +63,4 @@ addIncludeDirList :: PreprocessState -> [FilePath] -> PreprocessState
 addIncludeDirList st inc = st { includeDirs = includeDirs st ++ inc }
 
 type ErrorMsg = String
+type WarningMsg = String

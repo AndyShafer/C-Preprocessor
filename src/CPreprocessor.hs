@@ -122,6 +122,10 @@ preprocessLines filepath = do cs <- many codeSegment
                           do (text, e) <- errorPrim
                              return $ [CodeSegment text $ ErrorSegment e]
                             ) <|>
+                        try (
+                          do (text, w) <- warningPrim
+                             return $ [CodeSegment text $ WarningSegment w]
+                            ) <|>
                         try ifdef <|>
                         try ifndef <|>
                         try ifBlock <|>
@@ -168,6 +172,10 @@ preprocessLines filepath = do cs <- many codeSegment
 
           errorPrim = tokenPrim printText incPosition test
               where test (text, (DirectiveLine (ErrorDirective e))) = Just (text, e)
+                    test _ = Nothing
+
+          warningPrim = tokenPrim printText incPosition test
+              where test (text, (DirectiveLine (WarningDirective e))) = Just (text, e)
                     test _ = Nothing
 
           codePrim = tokenPrim printText incPosition test
@@ -267,6 +275,7 @@ showPreprocessed phs = concatMap expand
                          Placeholder n -> showPreprocessed [] $ phs !! n
                          IncludeSegment segs -> showPreprocessed [] segs
                          ErrorSegment msg -> text seg
+                         WarningSegment msg -> text seg
                          Conditional groups -> case L.find (\(b, _) -> b) groups of
                                                    Just (_, code) -> showPreprocessed [] code
                                                    Nothing -> ""
