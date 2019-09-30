@@ -6,6 +6,8 @@ import Text.Parsec.String
 import Text.Parsec.Expr
 import Text.Parsec.Language
 import CTokenParser
+import Common
+import CParseTypes
 
 data Expr = Constant Int | Uno Unop Expr | Duo Duop Expr Expr
     deriving Show
@@ -58,6 +60,18 @@ term = m_parens exprparser
 infixOp op duop = Infix (m_reservedOp op >> return (Duo duop)) AssocLeft
 
 prefixOp op unop = Prefix (m_reservedOp op >> return (Uno unop))
+
+definedOp :: [MacroDef] -> Parser String
+definedOp md = do m_reservedOp "defined" 
+                  mac <- (m_parens m_identifier <|> m_identifier)
+                  return $ if isDefined md mac then "1" else "0"
+
+evalDefined :: [MacroDef] -> String -> String
+evalDefined md s = case parse evalDefined' "" s of
+                     Left e -> error "evalDefined: parse failed"
+                     Right r -> r
+  where
+    evalDefined' = replaceAll (definedOp md) (anythingBut (alphaNum <|> char '_') >>= \c -> return $ [c])
 
 evalExpr :: String -> Int
 evalExpr inp = case parse exprparser "" inp of

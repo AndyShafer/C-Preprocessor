@@ -22,10 +22,10 @@ maybeToList :: Maybe [a] -> [a]
 maybeToList Nothing = []
 maybeToList (Just xs) = xs
 
-isDefined :: [MacroDef] -> String -> Bool
-isDefined mds s = case L.find ((s==) . title) mds of
-                       Nothing -> False
-                       Just _ -> True
+--isDefined :: [MacroDef] -> String -> Bool
+--isDefined mds s = case L.find ((s==) . title) mds of
+--                       Nothing -> False
+--                       Just _ -> True
 
 preprocessParser :: [String] -> [MacroDef] -> Parser [CodeSegment]
 preprocessParser phs md = many1 $ codeSegmentParser phs md
@@ -221,7 +221,7 @@ preprocessLines filepath = do cs <- many codeSegment
           ifBlock = do
               (ifText, e) <- ifPrim
               st <- getState
-              active <- return $ (/= 0) $ evalExpr $ showPreprocessed [] $ preprocessStr (macroDefs st) e
+              active <- evalDirectiveCondition e st
               segs <- manyTill codeSegment (lookAhead $ elifPrim <|> elsePrim <|> endifPrim)
               ifSt <- getState
               elifs <- many (setState st >> elifBlock)
@@ -247,7 +247,7 @@ preprocessLines filepath = do cs <- many codeSegment
           elifBlock = do
               (elifText, e) <- elifPrim
               st <- getState
-              active <- return $ (/= 0) $ evalExpr $ showPreprocessed [] $ preprocessStr (macroDefs st) e
+              active <- evalDirectiveCondition e st
               segs <- manyTill codeSegment (lookAhead $ elifPrim <|> elsePrim <|> endifPrim)
               newSt <- getState
               return (active, concat segs, elifText ++ (concat $ concat $ map (map text) segs), newSt)
@@ -256,6 +256,13 @@ preprocessLines filepath = do cs <- many codeSegment
                          segs <- manyTill codeSegment (lookAhead endifPrim)
                          return (elseText ++ (concat $ concat $ map (map text) segs), concat segs)
                       
+          evalDirectiveCondition expr st =
+              return                          $
+              (/= 0)                          $ -- Result is either 0 (false) or not 0 (true)
+              evalExpr                        $
+              showPreprocessed []             $ -- Expand macros and convert back to a string before evaluating
+              preprocessStr (macroDefs st)    $ -- Preprocess with the current state to find any macros
+              evalDefined (macroDefs st) expr   -- Evaluate defined operator before expanding macros
 
 defineToMacroDef :: [MacroDef] -> Directive -> MacroDef
 defineToMacroDef md (Define d p r) = MacroDef d (length <$> p) r

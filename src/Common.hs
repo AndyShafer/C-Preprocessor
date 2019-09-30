@@ -4,6 +4,7 @@ import Text.Parsec
 import Text.Parsec.Pos
 import Text.Parsec.String
 import CTokenParser
+import CParseTypes
 import Data.List
 
 -- Returns the result of the parser and the entire string that was consumed.
@@ -16,6 +17,18 @@ includeConsumed p = do startPos <- getPosition
         p' = do r <- p
                 e <- getPosition
                 return (r, e)
+
+replaceAll rep before = option "" (try rep) >>= \begin ->
+                        (manyTill $ do
+                           (unreplaced, _) <- includeConsumed $ manyTill anyChar $ (eof <|> (ignoreResult $ lookAhead before))
+                           (bef, _) <- includeConsumed $ option "" (try before)
+                           replaced <- option "" (try rep)
+                           return $ unreplaced ++ bef ++ replaced) eof >>= \res -> return $ begin ++ (concat res)
+
+ignoreResult p = p >> return ()
+
+anythingBut :: Parser Char -> Parser Char
+anythingBut p = notFollowedBy p >> anyChar
 
 -- Parses and returns string between start and end positions.
 -- The start position cannot be before the current position.
@@ -56,3 +69,9 @@ commentParser = try (
                   do string "//"
                      manyTill anyChar (lookAhead (endOfLine >> return ()) <|> eof)
                      return ' '
+
+isDefined :: [MacroDef] -> String -> Bool
+isDefined mds s = case find ((s==) . title) mds of
+                       Nothing -> False
+                       Just _ -> True
+

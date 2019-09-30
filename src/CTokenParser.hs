@@ -11,7 +11,7 @@ def = emptyDef{ commentStart = "/*"
             , identLetter = alphaNum <|> char '_'
             , reservedNames = ["include", "define", "ifdef", "ifndef", "else", "endif", "true"]
             , reservedOpNames = ["+", "*", "-", "/", "!", "&", "|", "~", "^", "&&", "||",
-                                 "==", "!=", ">", "<", ">=", "<=", "<<", ">>", "%"]
+                                 "==", "!=", ">", "<", ">=", "<=", "<<", ">>", "%", "defined"]
             , caseSensitive = True
             }
 
@@ -21,6 +21,7 @@ TokenParser{ parens = m_parens
            , stringLiteral = m_stringLiteral
            , reserved = m_reserved
            , reservedOp = m_reservedOp
+           , operator = m_operator
            , identifier = m_identifier
            , whiteSpace = m_whiteSpace 
            , integer = m_integer } = makeTokenParser def
