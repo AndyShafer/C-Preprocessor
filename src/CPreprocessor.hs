@@ -45,24 +45,25 @@ codeSegmentParser phs md = try (includeConsumed commentParser >>= \(s, _) ->
 
 macroParser :: [MacroDef] -> Parser CodeSegment
 macroParser md = do (text, (mac, argList)) <- includeConsumed possibleMacro
-                    case L.find ((mac==) . title) md of
-                        Nothing -> fail "Macro does not exist"
-                        Just m | (length <$> argList) == parameters m -> 
-                                     return $ CodeSegment text
-                                            $ Macro (expandedArgs argList) (expandedRedefine argList $ redefine m) 
-                               | argList == Just [""] && parameters m == Just 0 ->
-                                     return $ CodeSegment text
-                                            $ Macro (Just []) (expandedRedefine (Just []) $ redefine m)
-                               | otherwise ->      
-                                     return $ CodeSegment text $ ErrorSegment "Incorrect number of arguments"
+                    let newList = filter ((mac/=) . title) md in
+                      case L.find ((mac==) . title) md of
+                          Nothing -> fail "Macro does not exist"
+                          Just m | (length <$> argList) == parameters m -> 
+                                       return $ CodeSegment text
+                                              $ Macro (expandedArgs newList argList) (expandedRedefine argList newList $ redefine m) 
+                                 | argList == Just [""] && parameters m == Just 0 ->
+                                       return $ CodeSegment text
+                                              $ Macro (Just []) (expandedRedefine (Just []) newList $ redefine m)
+                                 | otherwise ->      
+                                       return $ CodeSegment text $ ErrorSegment "Incorrect number of arguments"
 
     where possibleMacro = do
               mac <- many1 macroChar
               argList <- macroArgsParser
               return (mac, argList)
-          expandedArgs (Just args) = Just $ map (preprocessStr md) args
-          expandedArgs Nothing = Nothing
-          expandedRedefine phs r = preprocessWithPlaceHolders phs md r
+          expandedArgs md' (Just args) = Just $ map (preprocessStr md') args
+          expandedArgs _ Nothing = Nothing
+          expandedRedefine phs md' r = preprocessWithPlaceHolders phs md' r
 
 placeHolderParser :: [String] -> Parser CodeInfo
 placeHolderParser phs = m_identifier >>=
