@@ -12,7 +12,7 @@ def = emptyDef{ commentStart = "/*"
             , identStart = letter <|> char '_'
             , identLetter = alphaNum <|> char '_'
             , reservedNames = ["include", "define", "ifdef", "ifndef", "else", "endif", "true"]
-            , reservedOpNames = ["+", "*", "-", "/", "!", "&", "|", "~", "^", "&&", "||",
+            , reservedOpNames = ["+", "*", "-", "/", "!", "&", "|", "~", "^", "&&", "||", "#",
                                  "==", "!=", ">", "<", ">=", "<=", "<<", ">>", "%", "defined"]
             , caseSensitive = True
             }

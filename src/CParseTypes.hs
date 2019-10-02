@@ -22,6 +22,7 @@ data IncludeFile = AngleBracketFile String | QuoteFile String
 data CodeInfo =    Plain
                  | Macro (Maybe [[CodeSegment]]) [CodeSegment]
                  | Placeholder Int
+                 | StringizedPlaceholder Int
                  | IncludeSegment [CodeSegment]
                  | Conditional [(Bool, [CodeSegment])]
                  | ErrorSegment ErrorMsg
@@ -29,7 +30,7 @@ data CodeInfo =    Plain
     deriving Show
 
 data MacroDef = MacroDef { title :: String
-                         , parameters :: Maybe Int
+                         , parameters :: Maybe [String]
                          , redefine :: String
                          }
     deriving Show

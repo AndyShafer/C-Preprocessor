@@ -22,6 +22,12 @@ maybeToList :: Maybe [a] -> [a]
 maybeToList Nothing = []
 maybeToList (Just xs) = xs
 
+stringize :: String -> String
+stringize s = '"' : (concatMap escapeChar s) ++ "\""
+    where escapeChar '\\' = "\\\\"
+          escapeChar '"'  = "\\\""
+          escapeChar c    = [c]
+
 --isDefined :: [MacroDef] -> String -> Bool
 --isDefined mds s = case L.find ((s==) . title) mds of
 --                       Nothing -> False
@@ -35,23 +41,25 @@ codeSegmentParser phs md = try (includeConsumed commentParser >>= \(s, _) ->
                                return $ CodeSegment s Plain) <|>
                            try (includeConsumed m_stringLiteral >>= \(s, _) ->
                                return $ CodeSegment s Plain)  <|>
+                           try ((includeConsumed $ stringizedParser phs) >>= \(s, sph) ->
+                               return $ CodeSegment s sph) <|>
                            try ((includeConsumed $ placeHolderParser phs) >>= \(s, ph) ->
                                return $ CodeSegment s ph)  <|>
                            try (macroParser md) <|>
                            try (many1 macroChar >>= \s -> 
                                return $ CodeSegment s Plain) <|>
                            (anyChar >>= \c ->
-                               return $ CodeSegment (c:[]) Plain)
+                               return $ CodeSegment ([c]) Plain)
 
 macroParser :: [MacroDef] -> Parser CodeSegment
 macroParser md = do (text, (mac, argList)) <- includeConsumed possibleMacro
                     let newList = filter ((mac/=) . title) md in
                       case L.find ((mac==) . title) md of
                           Nothing -> fail "Macro does not exist"
-                          Just m | (length <$> argList) == parameters m -> 
+                          Just m | (length <$> argList) == (length <$> parameters m) -> 
                                        return $ CodeSegment text
-                                              $ Macro (expandedArgs newList argList) (expandedRedefine argList newList $ redefine m) 
-                                 | argList == Just [""] && parameters m == Just 0 ->
+                                              $ Macro (expandedArgs newList argList) (expandedRedefine (parameters m) newList $ redefine m) 
+                                 | argList == Just [""] && (length <$> parameters m) == Just 0 ->
                                        return $ CodeSegment text
                                               $ Macro (Just []) (expandedRedefine (Just []) newList $ redefine m)
                                  | otherwise ->      
@@ -65,8 +73,13 @@ macroParser md = do (text, (mac, argList)) <- includeConsumed possibleMacro
           expandedArgs _ Nothing = Nothing
           expandedRedefine phs md' r = preprocessWithPlaceHolders phs md' r
 
+stringizedParser :: [String] -> Parser CodeInfo
+stringizedParser phs = m_reservedOp "#" >>
+                       placeHolderParser phs >>=
+                       \(Placeholder n) -> return $ StringizedPlaceholder n
+
 placeHolderParser :: [String] -> Parser CodeInfo
-placeHolderParser phs = m_identifier >>=
+placeHolderParser phs = many1 macroChar >>=
                         \id -> case id `elemIndex` phs of
                                    Nothing -> fail "Not a placeholder"
                                    Just n -> return $ Placeholder n
@@ -266,7 +279,7 @@ preprocessLines filepath = do cs <- many codeSegment
               evalDefined (macroDefs st) expr   -- Evaluate defined operator before expanding macros
 
 defineToMacroDef :: [MacroDef] -> Directive -> MacroDef
-defineToMacroDef md (Define d p r) = MacroDef d (length <$> p) r
+defineToMacroDef md (Define d p r) = MacroDef d p r
 defineToMacroDef _ _ = error "Not a define directive"
 
 showOriginal :: [CodeSegment] -> String
@@ -280,7 +293,8 @@ showPreprocessed phs = concatMap expand
                          -- Might want to change concatMap to a foldr to we can check if the next
                          -- segment starts with whitespace.
                          Macro phs' segs -> showPreprocessed (maybeToList phs') segs ++ " "
-                         Placeholder n -> showPreprocessed [] $ phs !! n
+                         Placeholder n -> (showPreprocessed [] $ phs !! n)
+                         StringizedPlaceholder n -> (stringize $ showOriginal $ phs !! n)
                          IncludeSegment segs -> showPreprocessed [] segs
                          ErrorSegment msg -> text seg
                          WarningSegment msg -> text seg
