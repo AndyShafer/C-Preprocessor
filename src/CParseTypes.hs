@@ -23,6 +23,7 @@ data CodeInfo =    Plain
                  | Macro (Maybe [[CodeSegment]]) [CodeSegment]
                  | Placeholder Int
                  | StringizedPlaceholder Int
+                 | Concatenated [CodeSegment]
                  | IncludeSegment [CodeSegment]
                  | Conditional [(Bool, [CodeSegment])]
                  | ErrorSegment ErrorMsg

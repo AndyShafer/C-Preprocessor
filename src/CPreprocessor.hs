@@ -41,15 +41,41 @@ codeSegmentParser phs md = try (includeConsumed commentParser >>= \(s, _) ->
                                return $ CodeSegment s Plain) <|>
                            try (includeConsumed m_stringLiteral >>= \(s, _) ->
                                return $ CodeSegment s Plain)  <|>
-                           try ((includeConsumed $ stringizedParser phs) >>= \(s, sph) ->
-                               return $ CodeSegment s sph) <|>
-                           try ((includeConsumed $ placeHolderParser phs) >>= \(s, ph) ->
-                               return $ CodeSegment s ph)  <|>
-                           try (macroParser md) <|>
-                           try (many1 macroChar >>= \s -> 
-                               return $ CodeSegment s Plain) <|>
+                           try concatParser <|>
+                          -- try ((includeConsumed $ stringizedParser phs) >>= \(s, sph) ->
+                          --     return $ CodeSegment s sph) <|>
+                          -- try ((includeConsumed $ placeHolderParser phs) >>= \(s, ph) ->
+                          --     return $ CodeSegment s ph)  <|>
+                          -- try (macroParser md) <|>
+                          -- try (many1 macroChar >>= \s -> 
+                          --     return $ CodeSegment s Plain) <|>
                            (anyChar >>= \c ->
                                return $ CodeSegment ([c]) Plain)
+    where concatParser = do (t, segs) <- includeConsumed $
+                                         sepBy1 (interpretToken phs md) $
+                                         try (m_whiteSpace >> string "##" >> m_whiteSpace)
+                            return $ if length segs == 1
+                                         then head segs
+                                         else CodeSegment t $ Concatenated segs
+                         
+                           
+                           --(do seg1 <- codeSegmentParser phs md
+                           --    w1 <- m_whiteSpace
+                           --    string "##"
+                           --    w2 <- m_whiteSpace
+                           --    seg2 <- codeSegmentParser phs md
+                           --    return $ Concatenated seg1 seg2
+                           --) >>= \(t, i) -> return $ CodeSegment t i
+                               
+                            
+interpretToken :: [String] -> [MacroDef] -> Parser CodeSegment
+interpretToken phs md = try ((includeConsumed $ stringizedParser phs) >>= \(s, sph) ->
+                            return $ CodeSegment s sph) <|>
+                        try ((includeConsumed $ placeHolderParser phs) >>= \(s, ph) ->
+                            return $ CodeSegment s ph)  <|>
+                        try (macroParser md) <|>
+                        try (many1 macroChar >>= \s -> 
+                            return $ CodeSegment s Plain)
 
 macroParser :: [MacroDef] -> Parser CodeSegment
 macroParser md = do (text, (mac, argList)) <- includeConsumed possibleMacro
@@ -295,6 +321,11 @@ showPreprocessed phs = concatMap expand
                          Macro phs' segs -> showPreprocessed (maybeToList phs') segs ++ " "
                          Placeholder n -> (showPreprocessed [] $ phs !! n)
                          StringizedPlaceholder n -> (stringize $ showOriginal $ phs !! n)
+                         Concatenated segs ->
+                             (removeWhiteSpaceAfter $ showPreprocessed phs [head segs]) ++
+                             (concat $ map (removeWhiteSpaceAfter . removeWhiteSpaceBefore . showPreprocessed phs . (:[]))
+                                           (init $ tail segs)) ++
+                             (removeWhiteSpaceBefore $ showPreprocessed phs [last segs])
                          IncludeSegment segs -> showPreprocessed [] segs
                          ErrorSegment msg -> text seg
                          WarningSegment msg -> text seg

@@ -70,6 +70,13 @@ commentParser = try (
                      manyTill anyChar (lookAhead (endOfLine >> return ()) <|> eof)
                      return ' '
 
+removeWhiteSpaceBefore :: String -> String
+removeWhiteSpaceBefore s = case parse (m_whiteSpace >> many anyChar) "" s of
+                              Right a -> a
+
+removeWhiteSpaceAfter :: String -> String
+removeWhiteSpaceAfter = reverse . removeWhiteSpaceBefore . reverse
+
 isDefined :: [MacroDef] -> String -> Bool
 isDefined mds s = case find ((s==) . title) mds of
                        Nothing -> False
